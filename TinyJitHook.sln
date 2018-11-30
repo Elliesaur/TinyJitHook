@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2050
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TinyJitHook", "TinyJitHook\TinyJitHook.csproj", "{30E40BD9-A0EE-451C-B24D-90B0B2485384}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|x64.Build.0 = Debug|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|x86.ActiveCfg = Debug|x86
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Debug|x86.Build.0 = Debug|x86
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|x64.ActiveCfg = Release|x64
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|x64.Build.0 = Release|x64
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|x86.ActiveCfg = Release|x86
+		{30E40BD9-A0EE-451C-B24D-90B0B2485384}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {45481323-3522-43AC-A618-01FEC5880749}
+	EndGlobalSection
+EndGlobal
