@@ -4,21 +4,19 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
-using TinyJitHook.Extensions;
-using TinyJitHook.HookHelpers;
-using TinyJitHook.Models;
-using TinyJitHook.SJITHook;
+using TinyJitHook.Core.Extensions;
+using TinyJitHook.Core.HookHelpers;
+using TinyJitHook.Core.Models;
+using TinyJitHook.Core.SJITHook;
 
-namespace TinyJitHook
+namespace TinyJitHook.Core
 {
     public unsafe class ExampleJitHook
     {
         private static ExampleJitHook _instance;
         private readonly IHookHelper _hookHelper;
-
-        public readonly bool Is64Bit;
         public int EntryCount;
-
+        public readonly bool Is64Bit;
         private Dictionary<IntPtr, Assembly> _scopeMap;
 
         public delegate void ActionDelegate(RawArguments args, Assembly relatedAssembly,
@@ -28,8 +26,6 @@ namespace TinyJitHook
 
         private readonly AutoResetEvent _compileMethodResetEvent;
         public event ActionDelegate OnCompileMethod;
-
-        #endregion
 
         public class RawArguments
         {
@@ -42,6 +38,16 @@ namespace TinyJitHook
             public IntPtr NativeSizeOfCode;
         }
 
+        #endregion
+
+        #region Delegates
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int GetMethodDefFromMethodDelegate(IntPtr thisPtr, IntPtr hMethodHandle);
+
+        #endregion
+
+
         public ExampleJitHook(Assembly asm, bool is64Bit)
         {
             Is64Bit = is64Bit;
@@ -52,17 +58,15 @@ namespace TinyJitHook
 
             if (is64Bit)
                 _hookHelper = new HookHelper64(asm, HookedCompileMethod64);
-            else
+            else 
                 _hookHelper = new HookHelper32(asm, HookedCompileMethod32);
 
             _hookHelper.Hook.PrepareOriginalCompileGetter(Is64Bit);
             Assembly.GetExecutingAssembly().PrepareMethods();
 
-            //AppDomain.CurrentDomain.PrepareAssemblies();
-
             _scopeMap = AppDomain.CurrentDomain.GetScopeMap();
-
         }
+
 
         public void Hook()
         {
@@ -155,10 +159,11 @@ namespace TinyJitHook
             Marshal.Copy(extraSections, 0, (IntPtr)Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
                          extraSections.Length);
 
+
             exit:
-            _instance.EntryCount--;
-            return _instance._hookHelper.Hook.OriginalCompileMethod32(thisPtr, corJitInfo, methodInfo, flags,
-                                                                  nativeEntry, nativeSizeOfCode);
+                _instance.EntryCount--;
+                return _instance._hookHelper.Hook.OriginalCompileMethod32(thisPtr, corJitInfo, methodInfo, flags,
+                                                                      nativeEntry, nativeSizeOfCode);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -179,9 +184,15 @@ namespace TinyJitHook
                 goto exit;
             }
 
-            var safeMethodInfo = new IntPtr((int*) methodInfo);
-            var token = (uint) (0x06000000 | *(ushort*) methodInfo->ftn);
+            var safeMethodInfo = new IntPtr((int*)methodInfo);
+            //var vtableCorJitInfo = Marshal.ReadIntPtr(corJitInfo);
 
+            //var getMethodDefFromMethodPtr = Marshal.ReadIntPtr(vtableCorJitInfo, IntPtr.Size * 105);
+            //var getMethodDefFromMethod = (GetMethodDefFromMethodDelegate)Marshal.GetDelegateForFunctionPointer(getMethodDefFromMethodPtr, typeof(GetMethodDefFromMethodDelegate));
+            //var token = (uint)getMethodDefFromMethod(corJitInfo, methodInfo->ftn);
+
+            var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
+            
             Assembly relatedAssembly = null;
             if (!_instance._scopeMap.ContainsKey(methodInfo->scope))
                 _instance._scopeMap = AppDomain.CurrentDomain.GetScopeMap();
@@ -201,7 +212,7 @@ namespace TinyJitHook
             };
 
             byte[] il = new byte[methodInfo->ilCodeSize];
-            Marshal.Copy((IntPtr) methodInfo->ilCode, il, 0, il.Length);
+            Marshal.Copy((IntPtr)methodInfo->ilCode, il, 0, il.Length);
 
             // Extra sections contains the exception handlers.
             byte[] extraSections = new byte[0];
@@ -219,7 +230,7 @@ namespace TinyJitHook
             // Assume something has changed.
             thisPtr = ra.ThisPtr;
             corJitInfo = ra.CorJitInfo;
-            methodInfo = (Data.CorMethodInfo64*) ra.MethodInfo.ToPointer();
+            methodInfo = (Data.CorMethodInfo64*)ra.MethodInfo.ToPointer();
             flags = ra.Flags;
             nativeEntry = ra.NativeEntry;
             nativeSizeOfCode = ra.NativeSizeOfCode;
@@ -227,12 +238,13 @@ namespace TinyJitHook
             // IL code and extra sections
             var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
             Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-            Data.VirtualProtect((IntPtr) methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
+            Data.VirtualProtect((IntPtr)methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
                                 out uint prevProt);
-            methodInfo->ilCode = (byte*) ilCodeHandle.ToPointer();
-            methodInfo->ilCodeSize = (uint) il.Length;
-            Marshal.Copy(extraSections, 0, (IntPtr) Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
+            methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
+            methodInfo->ilCodeSize = (uint)il.Length;
+            Marshal.Copy(extraSections, 0, (IntPtr)Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
                          extraSections.Length);
+
 
             exit:
                 _instance.EntryCount--;

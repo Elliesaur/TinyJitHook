@@ -1,10 +1,15 @@
 # TinyJitHook
-JIT Hook for .NET 2.0-4.6+ with x86 and x64 support.
+JIT Hook for:
+* .NET 2.0-4.6+ with x86 and x64 support.
+* .NET Core x.x-2.1 (tested) with x86 and x64 support for Windows devices only (WinAPI used).
 
 
 # Usage
 For .NET 4.0+ support you must compile the project **with** the conditional compilation symbol "NET4" as well as change the target framework.
+
 For .NET 2.0-3.5 support you must compile the project **without** the symbol as well as change the target framework.
+
+For .NET Core support you must compile the project **with** the conditional compilation symbol "NET4". Tested with .NET Core 2.0 and 2.1.
 
 
 # SJITHook

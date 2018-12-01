@@ -1,27 +1,26 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using TinyJitHook.Extensions;
-using TinyJitHook.SJITHook;
+using TinyJitHook.Core.Extensions;
+using TinyJitHook.Core.SJITHook;
 
-namespace TinyJitHook
+namespace TinyJitHook.Core
 {
-    public class Program
+    public unsafe class Program
     {
         public static void Main(string[] args)
         {
-            Assembly asm = Assembly.LoadFrom(@"Amelia_x64.exe");
+            Assembly asm = Assembly.LoadFrom(@"TinyJitHook.Core.TestApp_x64.dll");
+            // True indicates that it is x64.
             ExampleJitHook hook = new ExampleJitHook(asm, IntPtr.Size == 8);
-           
+
             hook.OnCompileMethod += ChangeExample;
-            hook.OnCompileMethod += NoChangeExample;
+            //hook.OnCompileMethod += NoChangeExample;
 
             hook.Hook();
 
-            asm.EntryPoint.Invoke(null, new object[] {});
+            asm.EntryPoint.Invoke(null, new object[] { new[] { "" } });
 
             hook.Unhook();
 
@@ -32,14 +31,15 @@ namespace TinyJitHook
         private static unsafe void ChangeExample(ExampleJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
             var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
-            Data.CorMethodInfo64* rawMethodInfo = (Data.CorMethodInfo64*)args.MethodInfo.ToPointer();
-
+            Data.CorMethodInfo* rawMethodInfo = (Data.CorMethodInfo*)args.MethodInfo.ToPointer();
             var insts = ilBytes.GetInstructions().ToList();
 
             Logger.LogInfo(typeof(Program), $"---------------------------------------");
             Logger.LogSuccess(typeof(Program), $"{methodBase.DeclaringType?.FullName}.{methodBase.Name}");
             Logger.LogSuccess(typeof(Program), $"Inst Count: {insts.Count}");
             Logger.LogSuccess(typeof(Program), $"Exception Handler Count: {rawMethodInfo->EHCount}");
+
+
 
             if (rawMethodInfo->EHCount > 0)
             {
