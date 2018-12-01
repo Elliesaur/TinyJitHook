@@ -18,3 +18,4 @@ I have changed them to work for test programs, not for everything out there in t
 * yck - ConfuserEx - Anti-Tamper JIT and Confuser 1.9 Anti-Tamper JIT x64 .NET 2.0
 * RebelDotNet - Good papers on JIT
 * .NET Core CLR
+* 0xd4d - Extra section reader

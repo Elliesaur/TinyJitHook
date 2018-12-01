@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using TinyJitHook.Extensions;
 using TinyJitHook.HookHelpers;
 using TinyJitHook.Models;
@@ -15,10 +16,17 @@ namespace TinyJitHook
         private static ExampleJitHook _instance;
         private readonly IHookHelper _hookHelper;
         public readonly bool Is64Bit;
-        private readonly Dictionary<IntPtr, Assembly> _scopeMap;
+        private Dictionary<IntPtr, Assembly> _scopeMap;
 
-        public delegate bool ActionDelegate(RawArguments args, ref byte[] ilBytes, uint methodToken, Assembly relatedAssembly);
-        public Dictionary<uint, ActionDelegate> Actions;
+        public delegate void ActionDelegate(RawArguments args, Assembly relatedAssembly,
+                                            uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes);
+
+        #region Events
+
+        private readonly AutoResetEvent _compileMethodResetEvent;
+        public event ActionDelegate OnCompileMethod;
+
+        #endregion
 
         public class RawArguments
         {
@@ -34,67 +42,65 @@ namespace TinyJitHook
         public ExampleJitHook(Assembly asm, bool is64Bit)
         {
             Is64Bit = is64Bit;
-            Actions = new Dictionary<uint, ActionDelegate>();
+
             _instance = this;
+            _compileMethodResetEvent = new AutoResetEvent(false);
 
             if (is64Bit)
-            {
                 _hookHelper = new HookHelper64(asm, HookedCompileMethod64);
-            }
             else
-            {
                 _hookHelper = new HookHelper32(asm, HookedCompileMethod32);
-            }
 
             _hookHelper.Hook.PrepareOriginalCompileGetter(Is64Bit);
+            Assembly.GetExecutingAssembly().PrepareMethods();
 
-
-            AppDomain.CurrentDomain.PrepareAssemblies();
+            //AppDomain.CurrentDomain.PrepareAssemblies();
 
             _scopeMap = AppDomain.CurrentDomain.GetScopeMap();
-            var tmp = _scopeMap.ContainsKey(IntPtr.Zero);
 
         }
+
         public void Hook()
         {
-            if (!Actions.ContainsKey(0))
-            {
-                throw new Exception("No default action! Add an action for key 0.");
-            }
-
-            if (!_hookHelper.Apply())
-            {
-                throw new Exception("Hook could not be applied.");
-            }
+            if (!_hookHelper.Apply()) throw new Exception("Hook could not be applied.");
         }
 
         public void Unhook()
         {
-            if (!_hookHelper.Remove())
-            {
-                throw new Exception("Hook could not be removed.");
-            }
+            if (!_hookHelper.Remove()) throw new Exception("Hook could not be removed.");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void OnCompileEventResetMethod(RawArguments args, Assembly assembly, uint methodToken,
+                                                      ref byte[] bytes,
+                                                      ref byte[] ehBytes)
+        {
+            _instance._compileMethodResetEvent.Set();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int HookedCompileMethod32(IntPtr thisPtr, [In] IntPtr corJitInfo,
-                                                        [In] Data.CorMethodInfo* methodInfo, Data.CorJitFlag flags,
-                                                        [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode)
+                                                 [In] Data.CorMethodInfo* methodInfo, Data.CorJitFlag flags,
+                                                 [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode)
         {
             // THIS IS THE 32 BIT COMPILE METHOD.
-            IntPtr safeMethodInfo = new IntPtr((int*)methodInfo);
+            var safeMethodInfo = new IntPtr((int*) methodInfo);
 
-            uint token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
+            var token = (uint) (0x06000000 | *(ushort*) methodInfo->ftn);
 
+            // Remove hook.
             _instance._hookHelper.Remove();
 
-            Assembly relatedAssembly = null;
-            if (_instance._scopeMap.ContainsKey(methodInfo->scope))
-            {
-                relatedAssembly = _instance._scopeMap[methodInfo->scope];
-            }
 
-            RawArguments ra = new RawArguments()
+            Assembly relatedAssembly = null;
+            if (!_instance._scopeMap.ContainsKey(methodInfo->scope))
+                _instance._scopeMap = AppDomain.CurrentDomain.GetScopeMap();
+            if (_instance._scopeMap.ContainsKey(methodInfo->scope))
+                relatedAssembly = _instance._scopeMap[methodInfo->scope];
+            else
+                goto reapplyHookCallOriginal;
+
+            var ra = new RawArguments
             {
                 ThisPtr = thisPtr,
                 CorJitInfo = corJitInfo,
@@ -105,40 +111,46 @@ namespace TinyJitHook
             };
 
             byte[] il = new byte[methodInfo->ilCodeSize];
-            Marshal.Copy((IntPtr)methodInfo->ilCode, il, 0, il.Length);
+            Marshal.Copy((IntPtr) methodInfo->ilCode, il, 0, il.Length);
 
-            bool changed = _instance.Actions.ContainsKey(token)
-                ? _instance.Actions[token](ra, ref il, token, relatedAssembly)
-                : _instance.Actions[0](ra, ref il, token, relatedAssembly);
-
-            if (changed)
+            // Extra sections contains the exception handlers.
+            byte[] extraSections = new byte[0];
+            if (methodInfo->EHCount > 0)
             {
-                thisPtr = ra.ThisPtr;
-                corJitInfo = ra.CorJitInfo;
-                methodInfo = (Data.CorMethodInfo*)ra.MethodInfo.ToPointer();
-                flags = ra.Flags;
-                nativeEntry = ra.NativeEntry;
-                nativeSizeOfCode = ra.NativeSizeOfCode;
-
-                IntPtr ilCodeHandle = Marshal.AllocHGlobal(il.Length);
-                Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-
-                // This isn't exactly safe, what happens to the original pointers?
-                // Is the size correct?
-                Data.VirtualProtect((IntPtr)methodInfo->ilCode, methodInfo->ilCodeSize, Data.Protection.PAGE_READWRITE,
-                                    out uint prevProt);
-
-                methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
-                methodInfo->ilCodeSize = (uint)il.Length;
-
-                // Cannot reprotect the marshal allocated memory.
-                //Data.VirtualProtect((IntPtr)methodInfo->ilCode, methodInfo->ilCodeSize, (Data.Protection)prevProt,
-                //                    out prevProt);
+                byte* extraSectionsPtr = methodInfo->ilCode + methodInfo->ilCodeSize;
+                extraSections = TryReadExtraSections(extraSectionsPtr);
             }
 
+            _instance.OnCompileMethod -= OnCompileEventResetMethod;
+            _instance.OnCompileMethod += OnCompileEventResetMethod;
+            _instance.OnCompileMethod(ra, relatedAssembly, token, ref il, ref extraSections);
+            _instance._compileMethodResetEvent.WaitOne();
 
+            // Assume something has changed.
+            thisPtr = ra.ThisPtr;
+            corJitInfo = ra.CorJitInfo;
+            methodInfo = (Data.CorMethodInfo*) ra.MethodInfo.ToPointer();
+            flags = ra.Flags;
+            nativeEntry = ra.NativeEntry;
+            nativeSizeOfCode = ra.NativeSizeOfCode;
+
+            // IL code and extra sections
+            var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
+            Marshal.Copy(il, 0, ilCodeHandle, il.Length);
+            Data.VirtualProtect((IntPtr) methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
+                                out uint prevProt);
+            methodInfo->ilCode = (byte*) ilCodeHandle.ToPointer();
+            methodInfo->ilCodeSize = (uint) il.Length;
+            Marshal.Copy(extraSections, 0, (IntPtr) Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
+                         extraSections.Length);
+
+
+            // Reapply hook.
+            reapplyHookCallOriginal:
             _instance._hookHelper.Apply();
-            return _instance._hookHelper.Hook.OriginalCompileMethod32(thisPtr, corJitInfo, methodInfo, flags, nativeEntry, nativeSizeOfCode);
+
+            return _instance._hookHelper.Hook.OriginalCompileMethod32(thisPtr, corJitInfo, methodInfo, flags,
+                                                                      nativeEntry, nativeSizeOfCode);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -147,19 +159,23 @@ namespace TinyJitHook
                                                  [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode)
         {
             // THIS IS THE 64 BIT COMPILE METHOD.
-            IntPtr safeMethodInfo = new IntPtr((int*)methodInfo);
+            var safeMethodInfo = new IntPtr((int*) methodInfo);
 
-            uint token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
+            var token = (uint) (0x06000000 | *(ushort*) methodInfo->ftn);
 
+            // Remove hook.
             _instance._hookHelper.Remove();
 
-            Assembly relatedAssembly = null;
-            if (_instance._scopeMap.ContainsKey(methodInfo->scope))
-            {
-                relatedAssembly = _instance._scopeMap[methodInfo->scope];
-            }
 
-            RawArguments ra = new RawArguments()
+            Assembly relatedAssembly = null;
+            if (!_instance._scopeMap.ContainsKey(methodInfo->scope))
+                _instance._scopeMap = AppDomain.CurrentDomain.GetScopeMap();
+            if (_instance._scopeMap.ContainsKey(methodInfo->scope))
+                relatedAssembly = _instance._scopeMap[methodInfo->scope];
+            else
+                goto reapplyHookCallOriginal;
+
+            var ra = new RawArguments
             {
                 ThisPtr = thisPtr,
                 CorJitInfo = corJitInfo,
@@ -170,40 +186,104 @@ namespace TinyJitHook
             };
 
             byte[] il = new byte[methodInfo->ilCodeSize];
-            Marshal.Copy((IntPtr)methodInfo->ilCode, il, 0, il.Length);
+            Marshal.Copy((IntPtr) methodInfo->ilCode, il, 0, il.Length);
 
-            bool changed = _instance.Actions.ContainsKey(token)
-                ? _instance.Actions[token](ra, ref il, token, relatedAssembly)
-                : _instance.Actions[0](ra, ref il, token, relatedAssembly);
-
-            if (changed)
+            // Extra sections contains the exception handlers.
+            byte[] extraSections = new byte[0];
+            if (methodInfo->EHCount > 0)
             {
-                thisPtr = ra.ThisPtr;
-                corJitInfo = ra.CorJitInfo;
-                methodInfo = (Data.CorMethodInfo64*)ra.MethodInfo.ToPointer();
-                flags = ra.Flags;
-                nativeEntry = ra.NativeEntry;
-                nativeSizeOfCode = ra.NativeSizeOfCode;
-
-                IntPtr ilCodeHandle = Marshal.AllocHGlobal(il.Length);
-                Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-
-                // This isn't exactly safe, what happens to the original pointers?
-                // Is the size correct?
-                Data.VirtualProtect((IntPtr)methodInfo->ilCode, methodInfo->ilCodeSize, Data.Protection.PAGE_READWRITE,
-                                    out uint prevProt);
-
-                methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
-                methodInfo->ilCodeSize = (uint)il.Length;
-
-                // Cannot reprotect the marshal allocated memory.
-                //Data.VirtualProtect((IntPtr)methodInfo->ilCode, methodInfo->ilCodeSize, (Data.Protection)prevProt,
-                //                    out prevProt);
+                byte* extraSectionsPtr = methodInfo->ilCode + methodInfo->ilCodeSize;
+                extraSections = TryReadExtraSections(extraSectionsPtr);
             }
 
+            _instance.OnCompileMethod -= OnCompileEventResetMethod;
+            _instance.OnCompileMethod += OnCompileEventResetMethod;
+            _instance.OnCompileMethod(ra, relatedAssembly, token, ref il, ref extraSections);
+            _instance._compileMethodResetEvent.WaitOne();
+
+            // Assume something has changed.
+            thisPtr = ra.ThisPtr;
+            corJitInfo = ra.CorJitInfo;
+            methodInfo = (Data.CorMethodInfo64*) ra.MethodInfo.ToPointer();
+            flags = ra.Flags;
+            nativeEntry = ra.NativeEntry;
+            nativeSizeOfCode = ra.NativeSizeOfCode;
+
+            // IL code and extra sections
+            var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
+            Marshal.Copy(il, 0, ilCodeHandle, il.Length);
+            Data.VirtualProtect((IntPtr) methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
+                                out uint prevProt);
+            methodInfo->ilCode = (byte*) ilCodeHandle.ToPointer();
+            methodInfo->ilCodeSize = (uint) il.Length;
+            Marshal.Copy(extraSections, 0, (IntPtr) Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
+                         extraSections.Length);
+
+
+            // Reapply hook.
+            reapplyHookCallOriginal:
             _instance._hookHelper.Apply();
+
             return _instance._hookHelper.Hook.OriginalCompileMethod64(thisPtr, corJitInfo, methodInfo, flags,
                                                                       nativeEntry, nativeSizeOfCode);
         }
+
+        #region Extra Section Reader
+
+        // Credits to 0xd4d
+        // https://github.com/0xd4d/de4dot/blob/master/de4dot.mdecrypt/DynamicMethodsDecrypter.cs
+        private static byte[] TryReadExtraSections(byte* p)
+        {
+            try
+            {
+                p = Align(p, 4);
+                byte* startPos = p;
+                p = ParseSection(p);
+                var size = (int) (p - startPos);
+                byte[] sections = new byte[size];
+                Marshal.Copy((IntPtr) startPos, sections, 0, sections.Length);
+                return sections;
+            }
+            catch (Exception ex)
+            {
+                return new byte[0];
+            }
+        }
+
+        private static byte* Align(byte* p, int alignment)
+        {
+            return (byte*) new IntPtr((long) ((ulong) (p + alignment - 1) & ~(ulong) (alignment - 1)));
+        }
+
+        private static byte* ParseSection(byte* p)
+        {
+            byte flags;
+            do
+            {
+                p = Align(p, 4);
+
+                flags = *p++;
+                if ((flags & 1) == 0)
+                    throw new ApplicationException("Not an exception section");
+                if ((flags & 0x3E) != 0)
+                    throw new ApplicationException("Invalid bits set");
+
+                if ((flags & 0x40) != 0)
+                {
+                    p--;
+                    int num = (int) (*(uint*) p >> 8) / 24;
+                    p += 4 + num * 24;
+                }
+                else
+                {
+                    int num = *p++ / 12;
+                    p += 2 + num * 12;
+                }
+            } while ((flags & 0x80) != 0);
+
+            return p;
+        }
+
+        #endregion
     }
 }

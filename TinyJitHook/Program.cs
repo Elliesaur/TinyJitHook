@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using TinyJitHook.Extensions;
+using TinyJitHook.SJITHook;
 
 namespace TinyJitHook
 {
@@ -11,10 +13,11 @@ namespace TinyJitHook
     {
         public static void Main(string[] args)
         {
-            Assembly asm = Assembly.LoadFrom(@"Amelia_EXAMPLE.exe");
+            Assembly asm = Assembly.LoadFrom(@"Amelia.exe");
             ExampleJitHook hook = new ExampleJitHook(asm, true);
-            // Default action is given a token of 0.
-            hook.Actions.Add(0, DefaultAction);
+           
+            hook.OnCompileMethod += ChangeExample;
+            hook.OnCompileMethod += NoChangeExample;
 
             hook.Hook();
 
@@ -25,26 +28,51 @@ namespace TinyJitHook
             Console.WriteLine("DONE");
             Console.ReadKey();
         }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static unsafe bool DefaultAction(ExampleJitHook.RawArguments args, ref byte[] ilBytes, uint methodToken, Assembly relatedAssembly)
+
+        private static unsafe void ChangeExample(ExampleJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
             var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
-            SJITHook.Data.CorMethodInfo64* rawMethodInfo = (SJITHook.Data.CorMethodInfo64*)args.MethodInfo.ToPointer();
+            Data.CorMethodInfo64* rawMethodInfo = (Data.CorMethodInfo64*)args.MethodInfo.ToPointer();
 
-            // Get the instructions in a nice mini-format.
+            Logger.LogInfo(typeof(Program), $"---------------------------------------");
+            Logger.LogSuccess(typeof(Program), $"{methodBase.DeclaringType?.FullName}.{methodBase.Name}");
+            Logger.LogSuccess(typeof(Program), $"Inst Count: {ilBytes.Length}");
+            Logger.LogSuccess(typeof(Program), $"Exception Handler Count: {rawMethodInfo->EHCount}");
+
             var insts = ilBytes.GetInstructions().ToList();
+
+            if (rawMethodInfo->EHCount > 0)
+            {
+                var ehs = ehBytes.GetExceptionHandlers(insts);
+                for (var i = 0; i < ehs.Count; i++)
+                {
+                    var eh = ehs[i];
+                    Logger.LogWarn(typeof(Program), $"Exception Handler {i + 1}:");
+                    Logger.LogWarn(typeof(Program), $" Type: {eh.HandlerType}");
+                    Logger.LogWarn(typeof(Program), $" TryStart: {eh.TryStart}");
+                    Logger.LogWarn(typeof(Program), $" TryEnd: {eh.TryEnd}");
+                    Logger.LogWarn(typeof(Program), $" CatchTypeToken: {eh.CatchTypeToken}");
+                }
+            }
             foreach (var inst in insts)
             {
-                inst.OpCode = OpCodes.Nop;
+                Logger.Log(typeof(Program), $"{inst}");
             }
-            insts.Add(Instruction.Create(OpCodes.Ret));
 
-            // Replace the instructions
-            ilBytes = insts.GetBytes();
+            //// Get the instructions in a nice mini-format.
+            //var insts = ilBytes.GetInstructions().ToList();
+            //foreach (var inst in insts)
+            //{
+            //    inst.OpCode = OpCodes.Nop;
+            //}
+            //insts.Add(Instruction.Create(OpCodes.Ret));
+            //ilBytes = insts.GetBytes();
+        }
 
-            // True indicates the method has been changed
-            // Do not return true if things have not changed
-            return true;
+        private static unsafe void NoChangeExample(ExampleJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
+        {
+            // Changes to the il byte array in the previous delegate will be reflected here.
+
         }
     }
 }
