@@ -11,9 +11,9 @@ using TinyJitHook.Core.SJITHook;
 
 namespace TinyJitHook.Core
 {
-    public unsafe class ExampleJitHook
+    public unsafe class MainJitHook
     {
-        private static ExampleJitHook _instance;
+        private static MainJitHook _instance;
         private readonly IHookHelper _hookHelper;
         public int EntryCount;
         public readonly bool Is64Bit;
@@ -48,7 +48,7 @@ namespace TinyJitHook.Core
         #endregion
 
 
-        public ExampleJitHook(Assembly asm, bool is64Bit)
+        public MainJitHook(Assembly asm, bool is64Bit)
         {
             Is64Bit = is64Bit;
             EntryCount = 0;

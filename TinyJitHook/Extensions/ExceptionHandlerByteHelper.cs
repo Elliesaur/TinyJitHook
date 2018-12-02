@@ -91,30 +91,36 @@ namespace TinyJitHook.Extensions
             return data;
         }
 
-        private static IEnumerable<ExceptionHandler> ReadBigExceptionHandlers(
+        private static List<ExceptionHandler> ReadBigExceptionHandlers(
             BinaryReader ehReader, List<Instruction> body)
         {
+            List<ExceptionHandler> ret = new List<ExceptionHandler>();
             ehReader.BaseStream.Position--;
             int num = (ushort) ((ehReader.ReadUInt32() >> 8) / 24);
             for (var i = 0; i < num; i++)
             {
                 var eh = new ExceptionHandler();
                 eh.ReadBig(ehReader, body);
-                yield return eh;
+                ret.Add(eh);
             }
+
+            return ret;
         }
 
-        private static IEnumerable<ExceptionHandler> ReadSmallExceptionHandlers(
+        private static List<ExceptionHandler> ReadSmallExceptionHandlers(
             BinaryReader ehReader, List<Instruction> body)
         {
+            List<ExceptionHandler> ret = new List<ExceptionHandler>();
             int num = (ushort) ((uint) ehReader.ReadByte() / 12);
             ehReader.BaseStream.Position += 2;
             for (var i = 0; i < num; i++)
             {
                 var eh = new ExceptionHandler();
                 eh.ReadSmall(ehReader, body);
-                yield return eh;
+                ret.Add(eh);
             }
+
+            return ret;
         }
 
         private static bool NeedBigExceptionClauses(List<ExceptionHandler> exceptionHandlers, List<Instruction> body,

@@ -31,7 +31,7 @@ namespace TinyJitHook.Extensions
             return ret;
         }
 
-        public static byte[] GetInstructionBytes(this IEnumerable<Instruction> instructions)
+        public static byte[] GetInstructionBytes(this List<Instruction> instructions)
         {
             using (MemoryStream ms = new MemoryStream())
             using (BinaryWriter w = new BinaryWriter(ms))

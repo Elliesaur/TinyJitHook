@@ -13,7 +13,7 @@ namespace TinyJitHook.Core
         {
             Assembly asm = Assembly.LoadFrom(@"TinyJitHook.Core.TestApp_x64.dll");
             // True indicates that it is x64.
-            ExampleJitHook hook = new ExampleJitHook(asm, IntPtr.Size == 8);
+            MainJitHook hook = new MainJitHook(asm, IntPtr.Size == 8);
 
             hook.OnCompileMethod += ChangeExample;
             //hook.OnCompileMethod += NoChangeExample;
@@ -28,7 +28,7 @@ namespace TinyJitHook.Core
             Console.ReadKey();
         }
 
-        private static unsafe void ChangeExample(ExampleJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
+        private static unsafe void ChangeExample(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
             var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
             Data.CorMethodInfo* rawMethodInfo = (Data.CorMethodInfo*)args.MethodInfo.ToPointer();
@@ -69,7 +69,7 @@ namespace TinyJitHook.Core
             //ilBytes = insts.GetBytes();
         }
 
-        private static unsafe void NoChangeExample(ExampleJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
+        private static unsafe void NoChangeExample(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
             // Changes to the il byte array in the previous delegate will be reflected here.
 

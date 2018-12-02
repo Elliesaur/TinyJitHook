@@ -85,7 +85,8 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ExampleJitHook.cs" />
+    <Compile Include="InjectionTest.cs" />
+    <Compile Include="MainJitHook.cs" />
     <Compile Include="ExceptionHandler.cs" />
     <Compile Include="Extensions\ExceptionHandlerByteHelper.cs" />
     <Compile Include="Extensions\JitHelper.cs" />

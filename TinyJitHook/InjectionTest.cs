@@ -2,37 +2,28 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
+using System.Text;
 using TinyJitHook.Extensions;
 using TinyJitHook.SJITHook;
 
 namespace TinyJitHook
 {
-    public class Program
+    public static class InjectionTest
     {
-        public static void Main(string[] args)
+        // Required to invoke static constructor.
+        public static int x;
+
+        static InjectionTest()
         {
-            Assembly asm = Assembly.LoadFrom(@"Amelia_x64.exe");
-            MainJitHook hook = new MainJitHook(asm, IntPtr.Size == 8);
-           
-            hook.OnCompileMethod += ChangeExample;
-            hook.OnCompileMethod += NoChangeExample;
-
+            MainJitHook hook = new MainJitHook(typeof(InjectionTest).Assembly, IntPtr.Size == 8);
+            hook.OnCompileMethod += CompileMethod;
             hook.Hook();
-
-            asm.EntryPoint.Invoke(null, new object[] {});
-
-            hook.Unhook();
-
-            Console.WriteLine("DONE");
-            Console.ReadKey();
         }
 
-        private static unsafe void ChangeExample(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
+        private static unsafe void CompileMethod(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
             var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
-            Data.CorMethodInfo64* rawMethodInfo = (Data.CorMethodInfo64*)args.MethodInfo.ToPointer();
+            Data.CorMethodInfo* rawMethodInfo = (Data.CorMethodInfo*)args.MethodInfo.ToPointer();
 
             var insts = ilBytes.GetInstructions();
 
@@ -58,21 +49,6 @@ namespace TinyJitHook
             {
                 Logger.Log(typeof(Program), $"{inst}");
             }
-
-            //// Get the instructions in a nice mini-format.
-            //var insts = ilBytes.GetInstructions().ToList();
-            //foreach (var inst in insts)
-            //{
-            //    inst.OpCode = OpCodes.Nop;
-            //}
-            //insts.Add(Instruction.Create(OpCodes.Ret));
-            //ilBytes = insts.GetBytes();
-        }
-
-        private static unsafe void NoChangeExample(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
-        {
-            // Changes to the il byte array in the previous delegate will be reflected here.
-
         }
     }
 }
