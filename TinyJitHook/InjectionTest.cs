@@ -30,43 +30,25 @@ namespace TinyJitHook
 
         private static unsafe void CompileMethod(MainJitHook.RawArguments args, Assembly relatedAssembly, uint methodToken, ref byte[] ilBytes, ref byte[] ehBytes)
         {
-            var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
-            Data.CorMethodInfo* rawMethodInfo = (Data.CorMethodInfo*)args.MethodInfo.ToPointer();
-
-            if (methodBase == relatedAssembly.EntryPoint)
+            try
             {
-                Console.WriteLine("REPLACING ENTRYPOINT");
+                var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int) methodToken);
 
-                ilBytes = Convert.FromBase64String(bytes); 
-                ehBytes = Convert.FromBase64String(bytes2);
-                rawMethodInfo->EHCount = 1;
+                if (methodBase == relatedAssembly.EntryPoint)
+                {
+                    Console.WriteLine("REPLACING ENTRYPOINT");
+
+                    ilBytes = Convert.FromBase64String(bytes);
+                    ehBytes = Convert.FromBase64String(bytes2);
+
+                    //var mi = (Data.CorMethodInfo*) args.MethodInfo;
+                    //mi->EHCount = 1; //(uint)ehBytes.GetExceptionHandlers(ilBytes.GetInstructions()).Count;
+                }
             }
-           
-                var insts = ilBytes.GetInstructions();
+            catch (Exception)
+            {
 
-                Logger.LogInfo(typeof(Program), $"---------------------------------------");
-                Logger.LogSuccess(typeof(Program), $"{methodBase.DeclaringType?.FullName}.{methodBase.Name}");
-                Logger.LogSuccess(typeof(Program), $"Inst Count: {insts.Count}");
-                Logger.LogSuccess(typeof(Program), $"Exception Handler Count: {rawMethodInfo->EHCount}");
-
-                if (rawMethodInfo->EHCount > 0)
-                {
-                    var ehs = ehBytes.GetExceptionHandlers(insts);
-                    for (var i = 0; i < ehs.Count; i++)
-                    {
-                        var eh = ehs[i];
-                        Logger.LogWarn(typeof(Program), $"Exception Handler {i + 1}:");
-                        Logger.LogWarn(typeof(Program), $" Type: {eh.HandlerType}");
-                        Logger.LogWarn(typeof(Program), $" TryStart: {eh.TryStart}");
-                        Logger.LogWarn(typeof(Program), $" TryEnd: {eh.TryEnd}");
-                        Logger.LogWarn(typeof(Program), $" CatchTypeToken: {eh.CatchTypeToken}");
-                    }
-                }
-                foreach (var inst in insts)
-                {
-                    Logger.Log(typeof(Program), $"{inst}");
-                }
-            
+            }
         }
     }
 }

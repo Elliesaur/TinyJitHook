@@ -75,8 +75,6 @@ namespace TinyJitHook
             if (!_hookHelper.Remove()) throw new Exception("Hook could not be removed.");
         }
 
-
-
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void OnCompileEventResetMethod(RawArguments args, Assembly assembly, uint methodToken,
                                                       ref byte[] bytes,
@@ -84,8 +82,6 @@ namespace TinyJitHook
         {
             _instance._compileMethodResetEvent.Set();
         }
-
-
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int HookedCompileMethod32(IntPtr thisPtr, [In] IntPtr corJitInfo,
@@ -108,7 +104,9 @@ namespace TinyJitHook
 
 
             var safeMethodInfo = new IntPtr((int*)methodInfo);
+#if NET4
             EHInfoHook exceptionHandlerHook = null;
+#endif
 
             var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
 
@@ -164,15 +162,6 @@ namespace TinyJitHook
                 nativeSizeOfCode = ra.NativeSizeOfCode;
 
                 // IL code and extra sections
-                //var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
-                //Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-                //Data.VirtualProtect((IntPtr)methodInfo->ilCode, (uint)methodInfo->ilCodeSize, Data.Protection.PAGE_EXECUTE_READWRITE,
-                //                    out uint prevProt);
-                ////methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
-                ////methodInfo->ilCodeSize = (uint)il.Length;
-                //Marshal.Copy(il, 0, (IntPtr)methodInfo->ilCode, (int)methodInfo->ilCodeSize);
-                //Marshal.Copy(extraSections, 0, (IntPtr)Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
-                //             extraSections.Length);
                 var ilCodeHandle = Marshal.AllocHGlobal(il.Length + (extraSections.Length * 2));
                 Marshal.Copy(il, 0, ilCodeHandle, il.Length);
                 Data.VirtualProtect((IntPtr)methodInfo->ilCode, (uint)IntPtr.Size, Data.Protection.PAGE_READWRITE,
@@ -182,20 +171,19 @@ namespace TinyJitHook
                 Marshal.Copy(extraSections, 0, (IntPtr)(methodInfo->ilCode + methodInfo->ilCodeSize),
                              extraSections.Length);
 
-                exceptionHandlerHook = new EHInfoHook(corJitInfo, methodInfo->ftn);
-
+#if NET4
+                if (methodInfo->EHCount > 0 || extraSections.Length > 2)
+                {
+                    exceptionHandlerHook = new EHInfoHook(corJitInfo, methodInfo->ftn, il, extraSections);
+                }
+#endif
             }
-
-
-
             
             var res = o(thisPtr, corJitInfo, methodInfo, flags,
                      nativeEntry, nativeSizeOfCode);
-            if (exceptionHandlerHook != null)
-            {
-                exceptionHandlerHook.Dispose();
-            }
-
+#if NET4
+            exceptionHandlerHook?.Dispose();
+#endif
             _instance.EntryCount--;
             return res;
         }
@@ -206,7 +194,6 @@ namespace TinyJitHook
                                                  [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode)
         {
             // THIS IS THE 64 BIT COMPILE METHOD.
-
             if (thisPtr == IntPtr.Zero) return 0;
 
             var o = _instance._hookHelper.Hook.OriginalCompileMethod64;
@@ -219,11 +206,16 @@ namespace TinyJitHook
                          nativeEntry, nativeSizeOfCode);
             }
 
+
             var safeMethodInfo = new IntPtr((int*)methodInfo);
+#if NET4
+            EHInfoHook exceptionHandlerHook = null;
+#endif
             var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
 
             lock (_jitCompileMethodLock)
             {
+
                 Assembly relatedAssembly = null;
                 if (!_instance._scopeMap.ContainsKey(methodInfo->scope))
                     _instance._scopeMap = AppDomain.CurrentDomain.GetScopeMap();
@@ -273,22 +265,102 @@ namespace TinyJitHook
                 nativeSizeOfCode = ra.NativeSizeOfCode;
 
                 // IL code and extra sections
-                var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
+                var ilCodeHandle = Marshal.AllocHGlobal(il.Length);
                 Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-                Data.VirtualProtect((IntPtr)methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
+                Data.VirtualProtect((IntPtr)methodInfo->ilCode, (uint)IntPtr.Size, Data.Protection.PAGE_READWRITE,
                                     out uint prevProt);
                 methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
                 methodInfo->ilCodeSize = (uint)il.Length;
-                Marshal.Copy(extraSections, 0, (IntPtr)Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
-                             extraSections.Length);
+
+#if NET4
+                if (methodInfo->EHCount > 0 || extraSections.Length > 2)
+                {
+                    exceptionHandlerHook = new EHInfoHook(corJitInfo, methodInfo->ftn, il, extraSections);
+                }
+#endif
             }
 
-            _instance.EntryCount--;
-            return o(thisPtr, corJitInfo, methodInfo, flags,
+            var res = o(thisPtr, corJitInfo, methodInfo, flags,
                      nativeEntry, nativeSizeOfCode);
+
+#if NET4
+            exceptionHandlerHook?.Dispose();
+#endif
+            _instance.EntryCount--;
+            return res;
         }
 
-        #region Extra Section Reader
+#region Other CorJitInfo Hooks
+#if NET4
+        private class EHInfoHook
+        {
+            private const int SLOT_COUNT = 166;
+            private const int SLOT_INDEX = 8;
+
+            public readonly IntPtr CorJitInfoPtr;
+            public readonly IntPtr* NewVfTable;
+            public readonly IntPtr* OldVfTable;
+
+            public readonly Data.CorInfoEhClause[] ExceptionHandlers;
+
+            public readonly Data.GetEHInfoDel OriginalMethod;
+            public readonly Data.GetEHInfoDel NewMethod;
+            public readonly IntPtr MethodFtn;
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public EHInfoHook(IntPtr corJitInfo, IntPtr ftn, byte[] ilBytes, byte[] ehBytes)
+
+            {
+                MethodFtn = ftn;
+                CorJitInfoPtr = corJitInfo;
+                ExceptionHandlers = ehBytes.GetExceptionClauses(ilBytes.GetInstructions()).ToArray();
+
+                OldVfTable = (IntPtr*)Marshal.ReadIntPtr(corJitInfo);
+
+                // Slot number, the amount of function pointers in the vftable.
+                // Original from ConfuserEx: 158
+                NewVfTable = (IntPtr*)Marshal.AllocHGlobal(IntPtr.Size * SLOT_COUNT);
+                for (int i = 0; i < SLOT_COUNT; i++)
+                {
+                    NewVfTable[i] = OldVfTable[i];
+                }
+
+                NewMethod = Hook;
+                OriginalMethod =
+                    (Data.GetEHInfoDel)Marshal.GetDelegateForFunctionPointer(OldVfTable[SLOT_INDEX], typeof(Data.GetEHInfoDel));
+
+                NewVfTable[SLOT_INDEX] = Marshal.GetFunctionPointerForDelegate(NewMethod);
+
+                Marshal.WriteIntPtr(corJitInfo, 0, (IntPtr)NewVfTable);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public void Dispose()
+            {
+                Marshal.FreeHGlobal((IntPtr)NewVfTable);
+                Marshal.WriteIntPtr(CorJitInfoPtr, 0, (IntPtr)OldVfTable);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void Hook(IntPtr ptr, IntPtr ftn, uint ehNumber, Data.CorInfoEhClause* clause)
+            {
+                if (ftn == MethodFtn)
+                {
+                    // Clause is OUT, get the exception handler bytes and get the correct clause.
+                    *clause = ExceptionHandlers[ehNumber];
+                }
+                else
+                {
+                    // The old getEHInfo method.
+                    OriginalMethod(ptr, ftn, ehNumber, clause);
+                }
+            }
+        }
+#endif
+#endregion
+
+
+#region Extra Section Reader
 
         // Credits to 0xd4d
         // https://github.com/0xd4d/de4dot/blob/master/de4dot.mdecrypt/DynamicMethodsDecrypter.cs
@@ -344,102 +416,6 @@ namespace TinyJitHook
             return p;
         }
 
-        #endregion
-
-        private class EHInfoHook
-        {
-            private readonly byte[] _delegateTrampolineCode = {
-                0x68, 0x00, 0x00, 0x00, 0x00,
-                0xc3
-            };
-
-            public readonly IntPtr CorJitInfoPtr;
-            public readonly IntPtr* NewVfTable;
-            public readonly IntPtr* OldVfTable;
-
-            public readonly Data.GetEHInfoDel OriginalMethod;
-            public readonly Data.GetEHInfoDel NewMethod;
-            public readonly IntPtr MethodFtn;
-
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            public EHInfoHook(IntPtr corJitInfo, IntPtr ftn)
-
-            {
-                MethodFtn = ftn;
-                // Find clauses from somewhere, lookup table for ftn --> list<excpetionhandler>?, need to provide them easily.
-                CorJitInfoPtr = corJitInfo;
-
-                OldVfTable = (IntPtr*)Marshal.ReadIntPtr(corJitInfo);
-
-                // Slot number, the amount of function pointers in the vftable.
-                // Original from ConfuserEx: 158
-                const int slotNum = 166;
-                NewVfTable = (IntPtr*) Marshal.AllocHGlobal(slotNum * IntPtr.Size);
-                for (int i = 0; i < slotNum; i++)
-                {
-                    NewVfTable[i] = OldVfTable[i];
-                }
-
-                NewMethod = Hook;
-                OriginalMethod =
-                    (Data.GetEHInfoDel) Marshal.GetDelegateForFunctionPointer(OldVfTable[8], typeof(Data.GetEHInfoDel));
-
-                NewVfTable[8] = Marshal.GetFunctionPointerForDelegate(NewMethod);
-
-                Marshal.WriteIntPtr(corJitInfo, 0, (IntPtr)NewVfTable);
-            }
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            public void Dispose()
-            {
-                Marshal.FreeHGlobal((IntPtr)NewVfTable);
-                Marshal.WriteIntPtr(CorJitInfoPtr, 0, (IntPtr)OldVfTable);
-            }
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            // The new getehinfo method.
-            private void Hook(IntPtr ptr, IntPtr ftn, uint ehNumber, Data.CorInfoEhClause* clause)
-            {
-                OriginalMethod(ptr, ftn, ehNumber, clause);
-            }
-
-            ////public void Hook2()
-            ////{
-            ////    Data.VirtualProtect(_getEhInfoPtr, (uint)IntPtr.Size,
-            ////                        Data.Protection.PAGE_EXECUTE_READWRITE, out uint oldProt);
-
-            ////    var fPtr = Marshal.GetFunctionPointerForDelegate(_newGetEhInfoDel);
-            ////    PreLoad<Data.GetEHInfoDel>(fPtr, d =>
-            ////    {
-            ////        var casted = (Data.GetEHInfoDel)d;
-            ////        casted(IntPtr.Zero, IntPtr.Zero, 0, default(Data.CorInfoEhClause));
-            ////    });
-
-            ////    Marshal.WriteIntPtr(_getEhInfoPtr, fPtr);
-            ////    Data.VirtualProtect(_getEhInfoPtr, (uint)IntPtr.Size,
-            ////                        (Data.Protection)oldProt, out oldProt);
-            ////}
-            //private void PreLoad<T>(IntPtr fPtr, Action<Delegate> testAction)
-            //{
-            //    // Trampoline to reverse pinvoke
-            //    var tPtr = AllocateTrampoline(fPtr);
-            //    var t = Marshal.GetDelegateForFunctionPointer(
-            //        tPtr, typeof(T));
-
-            //    testAction(t);
-
-            //    // Free it.
-            //    Marshal.FreeHGlobal(tPtr);
-            //}
-
-            //private IntPtr AllocateTrampoline(IntPtr ptr)
-            //{
-            //    var jmpNative = Marshal.AllocHGlobal(_delegateTrampolineCode.Length);
-            //    if (!Data.VirtualProtect(jmpNative, (uint)_delegateTrampolineCode.Length,
-            //                             Data.Protection.PAGE_EXECUTE_READWRITE, out uint old))
-            //        return IntPtr.Zero;
-            //    Marshal.Copy(_delegateTrampolineCode, 0, jmpNative, _delegateTrampolineCode.Length);
-            //    Marshal.WriteIntPtr(jmpNative, 1, ptr);
-            //    return jmpNative;
-            //}
-        }
+#endregion
     }
 }

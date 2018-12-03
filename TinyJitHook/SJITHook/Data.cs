@@ -611,15 +611,15 @@ namespace TinyJitHook.SJITHook
 
         #region Exception Handler Clause
 
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Sequential, Size = 24)]
         public unsafe struct CorInfoEhClause
         {
-            CorInfoEhClauseFlags* Flags;
-            uint TryOffset;
-            uint TryLength;
-            uint HandlerOffset;
-            uint HandlerLength;
-            uint ClassTokenOrFilterOffset;   // use for type-based exception handlers
+            public uint Flags;
+            public uint TryOffset;
+            public uint TryLength;
+            public uint HandlerOffset;
+            public uint HandlerLength;
+            public uint ClassTokenOrFilterOffset;   // use for type-based exception handlers
         };
 
         #endregion

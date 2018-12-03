@@ -2,11 +2,32 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using TinyJitHook.SJITHook;
 
 namespace TinyJitHook.Extensions
 {
     public static class ExceptionHandlerByteHelper
     {
+        public static List<Data.CorInfoEhClause> GetExceptionClauses(this byte[] data,
+                                                                     List<Instruction> relatedMethodBody)
+        {
+            List<ExceptionHandler> ehList = data.GetExceptionHandlers(relatedMethodBody);
+            List<Data.CorInfoEhClause> exceptionHandlers = new List<Data.CorInfoEhClause>();
+            foreach (var eh in ehList)
+            {
+                exceptionHandlers.Add(new Data.CorInfoEhClause
+                {
+                    Flags = (uint)eh.HandlerType,
+                    TryOffset = eh.TryStartRaw,
+                    TryLength = eh.TryEndRaw - eh.TryStartRaw,
+                    HandlerOffset = eh.HandlerStartRaw,
+                    HandlerLength = eh.HandlerEndRaw - eh.HandlerStartRaw,
+                    ClassTokenOrFilterOffset = eh.CatchTypeToken
+                });
+            }
+
+            return exceptionHandlers;
+        }
         public static List<ExceptionHandler> GetExceptionHandlers(
             this byte[] data, List<Instruction> relatedMethodBody)
         {

@@ -13,7 +13,7 @@ namespace TinyJitHook
     {
         public static void Main(string[] args)
         {
-            Assembly asm = Assembly.LoadFrom(@"Amelia_dotnet4_x86.exe");
+            Assembly asm = Assembly.LoadFrom(@"Amelia_dotnet4_x86_mod.exe");
             MainJitHook hook = new MainJitHook(asm, IntPtr.Size == 8);
            
             hook.OnCompileMethod += ChangeExample;
@@ -37,13 +37,13 @@ namespace TinyJitHook
                 bool flag = methodBase == relatedAssembly.EntryPoint;
                 if (flag)
                 {
-                    //Console.WriteLine("REPLACING ENTRYPOINT");
+                    Console.WriteLine("REPLACING ENTRYPOINT");
                     //string b64 = Convert.ToBase64String(ilBytes);
                     //string b642 = Convert.ToBase64String(ehBytes);
 
-                    //ilBytes = Convert.FromBase64String(bytes);
-                    //ehBytes = Convert.FromBase64String(bytes2);
-                    //rawMethodInfo->EHCount = 1;
+                    ilBytes = Convert.FromBase64String(bytes);
+                    ehBytes = Convert.FromBase64String(bytes2);
+                    rawMethodInfo->EHCount = 1;
                 }
 
                 var insts = ilBytes.GetInstructions();
@@ -78,9 +78,9 @@ namespace TinyJitHook
             }
         }
         // Token: 0x0400000B RID: 11
-        public static string bytes = "AChMAAAKAAAWKE0AAAoAcwsAAAYoTgAACgAA3hEKAHK5AgBwBihPAAAKAADeACo=";
+        public static string bytes = "AChNAAAKAAAWKE4AAAoAcwsAAAYoTwAACgAA3hEKAHK5AgBwBihQAAAKAADeACo="; //"AChNAAAKAAAWKE4AAAoAcwsAAAYoTwAACgAA3hEKAHK5AgBwBihQAAAKAADeACo=";
 
         // Token: 0x0400000C RID: 12
-        public static string bytes2 = "ARAAAAAABwAWHQARHgAAAQ==";
+        public static string bytes2 = "ARAAAAAABwAWHQARHwAAAQ==";  // "ARAAAAAABwAWHQARHwAAAQ==";
     }
 }
