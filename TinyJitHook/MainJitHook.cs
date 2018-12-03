@@ -75,6 +75,8 @@ namespace TinyJitHook
             if (!_hookHelper.Remove()) throw new Exception("Hook could not be removed.");
         }
 
+
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void OnCompileEventResetMethod(RawArguments args, Assembly assembly, uint methodToken,
                                                       ref byte[] bytes,
@@ -82,6 +84,8 @@ namespace TinyJitHook
         {
             _instance._compileMethodResetEvent.Set();
         }
+
+
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int HookedCompileMethod32(IntPtr thisPtr, [In] IntPtr corJitInfo,
@@ -102,11 +106,15 @@ namespace TinyJitHook
                          nativeEntry, nativeSizeOfCode);
             }
 
-            var safeMethodInfo = new IntPtr((int*) methodInfo);
-            var token = (uint) (0x06000000 | *(ushort*) methodInfo->ftn);
+
+            var safeMethodInfo = new IntPtr((int*)methodInfo);
+            EHInfoHook exceptionHandlerHook = null;
+
+            var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
 
             lock (_jitCompileMethodLock)
             {
+
                 Assembly relatedAssembly = null;
                 if (!_instance._scopeMap.ContainsKey(methodInfo->scope))
                     _instance._scopeMap = AppDomain.CurrentDomain.GetScopeMap();
@@ -132,7 +140,7 @@ namespace TinyJitHook
                 };
 
                 byte[] il = new byte[methodInfo->ilCodeSize];
-                Marshal.Copy((IntPtr) methodInfo->ilCode, il, 0, il.Length);
+                Marshal.Copy((IntPtr)methodInfo->ilCode, il, 0, il.Length);
 
                 // Extra sections contains the exception handlers.
                 byte[] extraSections = new byte[0];
@@ -150,26 +158,46 @@ namespace TinyJitHook
                 // Assume something has changed.
                 thisPtr = ra.ThisPtr;
                 corJitInfo = ra.CorJitInfo;
-                methodInfo = (Data.CorMethodInfo*) ra.MethodInfo.ToPointer();
+                methodInfo = (Data.CorMethodInfo*)ra.MethodInfo.ToPointer();
                 flags = ra.Flags;
                 nativeEntry = ra.NativeEntry;
                 nativeSizeOfCode = ra.NativeSizeOfCode;
 
                 // IL code and extra sections
-                var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
+                //var ilCodeHandle = Marshal.AllocHGlobal(il.Length + extraSections.Length);
+                //Marshal.Copy(il, 0, ilCodeHandle, il.Length);
+                //Data.VirtualProtect((IntPtr)methodInfo->ilCode, (uint)methodInfo->ilCodeSize, Data.Protection.PAGE_EXECUTE_READWRITE,
+                //                    out uint prevProt);
+                ////methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
+                ////methodInfo->ilCodeSize = (uint)il.Length;
+                //Marshal.Copy(il, 0, (IntPtr)methodInfo->ilCode, (int)methodInfo->ilCodeSize);
+                //Marshal.Copy(extraSections, 0, (IntPtr)Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
+                //             extraSections.Length);
+                var ilCodeHandle = Marshal.AllocHGlobal(il.Length + (extraSections.Length * 2));
                 Marshal.Copy(il, 0, ilCodeHandle, il.Length);
-                Data.VirtualProtect((IntPtr) methodInfo->ilCode, 1, Data.Protection.PAGE_READWRITE,
+                Data.VirtualProtect((IntPtr)methodInfo->ilCode, (uint)IntPtr.Size, Data.Protection.PAGE_READWRITE,
                                     out uint prevProt);
-                methodInfo->ilCode = (byte*) ilCodeHandle.ToPointer();
-                methodInfo->ilCodeSize = (uint) il.Length;
-                Marshal.Copy(extraSections, 0, (IntPtr) Align(methodInfo->ilCode + methodInfo->ilCodeSize, 4),
+                methodInfo->ilCode = (byte*)ilCodeHandle.ToPointer();
+                methodInfo->ilCodeSize = (uint)il.Length;
+                Marshal.Copy(extraSections, 0, (IntPtr)(methodInfo->ilCode + methodInfo->ilCodeSize),
                              extraSections.Length);
+
+                exceptionHandlerHook = new EHInfoHook(corJitInfo, methodInfo->ftn);
+
+            }
+
+
+
+            
+            var res = o(thisPtr, corJitInfo, methodInfo, flags,
+                     nativeEntry, nativeSizeOfCode);
+            if (exceptionHandlerHook != null)
+            {
+                exceptionHandlerHook.Dispose();
             }
 
             _instance.EntryCount--;
-            return o(thisPtr, corJitInfo, methodInfo, flags,
-                     nativeEntry, nativeSizeOfCode);
-            
+            return res;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -271,9 +299,9 @@ namespace TinyJitHook
                 p = Align(p, 4);
                 byte* startPos = p;
                 p = ParseSection(p);
-                var size = (int) (p - startPos);
+                var size = (int)(p - startPos);
                 byte[] sections = new byte[size];
-                Marshal.Copy((IntPtr) startPos, sections, 0, sections.Length);
+                Marshal.Copy((IntPtr)startPos, sections, 0, sections.Length);
                 return sections;
             }
             catch (Exception ex)
@@ -284,7 +312,7 @@ namespace TinyJitHook
 
         private static byte* Align(byte* p, int alignment)
         {
-            return (byte*) new IntPtr((long) ((ulong) (p + alignment - 1) & ~(ulong) (alignment - 1)));
+            return (byte*)new IntPtr((long)((ulong)(p + alignment - 1) & ~(ulong)(alignment - 1)));
         }
 
         private static byte* ParseSection(byte* p)
@@ -303,7 +331,7 @@ namespace TinyJitHook
                 if ((flags & 0x40) != 0)
                 {
                     p--;
-                    int num = (int) (*(uint*) p >> 8) / 24;
+                    int num = (int)(*(uint*)p >> 8) / 24;
                     p += 4 + num * 24;
                 }
                 else
@@ -317,5 +345,101 @@ namespace TinyJitHook
         }
 
         #endregion
+
+        private class EHInfoHook
+        {
+            private readonly byte[] _delegateTrampolineCode = {
+                0x68, 0x00, 0x00, 0x00, 0x00,
+                0xc3
+            };
+
+            public readonly IntPtr CorJitInfoPtr;
+            public readonly IntPtr* NewVfTable;
+            public readonly IntPtr* OldVfTable;
+
+            public readonly Data.GetEHInfoDel OriginalMethod;
+            public readonly Data.GetEHInfoDel NewMethod;
+            public readonly IntPtr MethodFtn;
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public EHInfoHook(IntPtr corJitInfo, IntPtr ftn)
+
+            {
+                MethodFtn = ftn;
+                // Find clauses from somewhere, lookup table for ftn --> list<excpetionhandler>?, need to provide them easily.
+                CorJitInfoPtr = corJitInfo;
+
+                OldVfTable = (IntPtr*)Marshal.ReadIntPtr(corJitInfo);
+
+                // Slot number, the amount of function pointers in the vftable.
+                // Original from ConfuserEx: 158
+                const int slotNum = 166;
+                NewVfTable = (IntPtr*) Marshal.AllocHGlobal(slotNum * IntPtr.Size);
+                for (int i = 0; i < slotNum; i++)
+                {
+                    NewVfTable[i] = OldVfTable[i];
+                }
+
+                NewMethod = Hook;
+                OriginalMethod =
+                    (Data.GetEHInfoDel) Marshal.GetDelegateForFunctionPointer(OldVfTable[8], typeof(Data.GetEHInfoDel));
+
+                NewVfTable[8] = Marshal.GetFunctionPointerForDelegate(NewMethod);
+
+                Marshal.WriteIntPtr(corJitInfo, 0, (IntPtr)NewVfTable);
+            }
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public void Dispose()
+            {
+                Marshal.FreeHGlobal((IntPtr)NewVfTable);
+                Marshal.WriteIntPtr(CorJitInfoPtr, 0, (IntPtr)OldVfTable);
+            }
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            // The new getehinfo method.
+            private void Hook(IntPtr ptr, IntPtr ftn, uint ehNumber, Data.CorInfoEhClause* clause)
+            {
+                OriginalMethod(ptr, ftn, ehNumber, clause);
+            }
+
+            ////public void Hook2()
+            ////{
+            ////    Data.VirtualProtect(_getEhInfoPtr, (uint)IntPtr.Size,
+            ////                        Data.Protection.PAGE_EXECUTE_READWRITE, out uint oldProt);
+
+            ////    var fPtr = Marshal.GetFunctionPointerForDelegate(_newGetEhInfoDel);
+            ////    PreLoad<Data.GetEHInfoDel>(fPtr, d =>
+            ////    {
+            ////        var casted = (Data.GetEHInfoDel)d;
+            ////        casted(IntPtr.Zero, IntPtr.Zero, 0, default(Data.CorInfoEhClause));
+            ////    });
+
+            ////    Marshal.WriteIntPtr(_getEhInfoPtr, fPtr);
+            ////    Data.VirtualProtect(_getEhInfoPtr, (uint)IntPtr.Size,
+            ////                        (Data.Protection)oldProt, out oldProt);
+            ////}
+            //private void PreLoad<T>(IntPtr fPtr, Action<Delegate> testAction)
+            //{
+            //    // Trampoline to reverse pinvoke
+            //    var tPtr = AllocateTrampoline(fPtr);
+            //    var t = Marshal.GetDelegateForFunctionPointer(
+            //        tPtr, typeof(T));
+
+            //    testAction(t);
+
+            //    // Free it.
+            //    Marshal.FreeHGlobal(tPtr);
+            //}
+
+            //private IntPtr AllocateTrampoline(IntPtr ptr)
+            //{
+            //    var jmpNative = Marshal.AllocHGlobal(_delegateTrampolineCode.Length);
+            //    if (!Data.VirtualProtect(jmpNative, (uint)_delegateTrampolineCode.Length,
+            //                             Data.Protection.PAGE_EXECUTE_READWRITE, out uint old))
+            //        return IntPtr.Zero;
+            //    Marshal.Copy(_delegateTrampolineCode, 0, jmpNative, _delegateTrampolineCode.Length);
+            //    Marshal.WriteIntPtr(jmpNative, 1, ptr);
+            //    return jmpNative;
+            //}
+        }
     }
 }

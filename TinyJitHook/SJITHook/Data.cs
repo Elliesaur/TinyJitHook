@@ -56,6 +56,17 @@ namespace TinyJitHook.SJITHook
         #region Standard
 
         #region Enums
+
+        public enum CorInfoEhClauseFlags
+        {
+            CORINFO_EH_CLAUSE_NONE = 0,
+            CORINFO_EH_CLAUSE_FILTER = 0x0001,    // If this bit is on, then this EH entry is for a filter
+            CORINFO_EH_CLAUSE_FINALLY = 0x0002,   // This clause is a finally clause
+            CORINFO_EH_CLAUSE_FAULT = 0x0004,     // This clause is a fault clause
+            CORINFO_EH_CLAUSE_DUPLICATE = 0x0008, // Duplicated clause. This clause was duplicated to a funclet which was pulled out of line
+            CORINFO_EH_CLAUSE_SAMETRY = 0x0010,   // This clause covers same try block as the previous one. (Used by CoreRT ABI.)
+        };
+
         // Linked with CorInfoMethodInfo->options
         // Changes size depending on .net version, ushort for .net 4.0, uint for .net 3.5
         /// <summary>
@@ -598,13 +609,28 @@ namespace TinyJitHook.SJITHook
         }
         #endregion
 
+        #region Exception Handler Clause
+
+        [StructLayout(LayoutKind.Sequential)]
+        public unsafe struct CorInfoEhClause
+        {
+            CorInfoEhClauseFlags* Flags;
+            uint TryOffset;
+            uint TryLength;
+            uint HandlerOffset;
+            uint HandlerLength;
+            uint ClassTokenOrFilterOffset;   // use for type-based exception handlers
+        };
+
+        #endregion
+
         #endregion
 
         #endregion
 
         #region Safe CorMethodInfos
 
-        
+
         public class SafeCorMethodInfo64
         {
 #if NET4
@@ -839,6 +865,19 @@ namespace TinyJitHook.SJITHook
         public unsafe delegate int CompileMethodDel64(
             IntPtr thisPtr, [In] IntPtr corJitInfo, [In] CorMethodInfo64* methodInfo, CorJitFlag flags,
             [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode);
+
+        #endregion
+
+        #region Exception Handler Info Delegate
+
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall, SetLastError = true)]
+        public unsafe delegate void GetEHInfoDel(IntPtr thisPtr, [In] IntPtr ftn, [In] uint EHnumber,
+                                                [Out] CorInfoEhClause* clause);
+        //virtual void getEHinfo(
+        //    CORINFO_METHOD_HANDLE ftn, /* IN  */
+        //    unsigned EHnumber,         /* IN */
+        //    CORINFO_EH_CLAUSE* clause  /* OUT */
+        //)
 
         #endregion
     }
