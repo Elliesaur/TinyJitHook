@@ -13,6 +13,7 @@ namespace TinyJitHook
 {
     public unsafe class MainJitHook
     {
+        private const int GET_METHOD_DEF_FROM_METHOD_SLOT_INDEX = 105;
         private static MainJitHook _instance;
         private readonly IHookHelper _hookHelper;
 
@@ -108,7 +109,13 @@ namespace TinyJitHook
             EHInfoHook exceptionHandlerHook = null;
 #endif
 
+#if NET4
+            var functionPtr = Marshal.ReadIntPtr(Marshal.ReadIntPtr(corJitInfo), IntPtr.Size * GET_METHOD_DEF_FROM_METHOD_SLOT_INDEX);
+            var getMethodDef = (Data.GetMethodDefFromMethodDel)Marshal.GetDelegateForFunctionPointer(functionPtr, typeof(Data.GetMethodDefFromMethodDel));
+            var token = getMethodDef(corJitInfo, methodInfo->ftn);
+#else
             var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
+#endif
 
             lock (_jitCompileMethodLock)
             {
@@ -211,7 +218,14 @@ namespace TinyJitHook
 #if NET4
             EHInfoHook exceptionHandlerHook = null;
 #endif
+
+#if NET4
+            var functionPtr = Marshal.ReadIntPtr(Marshal.ReadIntPtr(corJitInfo), IntPtr.Size * GET_METHOD_DEF_FROM_METHOD_SLOT_INDEX);
+            var getMethodDef = (Data.GetMethodDefFromMethodDel)Marshal.GetDelegateForFunctionPointer(functionPtr, typeof(Data.GetMethodDefFromMethodDel));
+            var token = getMethodDef(corJitInfo, methodInfo->ftn);
+#else
             var token = (uint)(0x06000000 | *(ushort*)methodInfo->ftn);
+#endif
 
             lock (_jitCompileMethodLock)
             {

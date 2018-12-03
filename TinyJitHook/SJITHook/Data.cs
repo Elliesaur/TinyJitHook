@@ -868,7 +868,7 @@ namespace TinyJitHook.SJITHook
 
         #endregion
 
-        #region Exception Handler Info Delegate
+        #region Other Delegates
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall, SetLastError = true)]
         public unsafe delegate void GetEHInfoDel(IntPtr thisPtr, [In] IntPtr ftn, [In] uint EHnumber,
@@ -878,6 +878,9 @@ namespace TinyJitHook.SJITHook
         //    unsigned EHnumber,         /* IN */
         //    CORINFO_EH_CLAUSE* clause  /* OUT */
         //)
+
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        public delegate uint GetMethodDefFromMethodDel(IntPtr thisPtr, IntPtr ftn);
 
         #endregion
     }
