@@ -839,7 +839,7 @@ namespace TinyJitHook.SJITHook
         /// <summary>
         /// The 32 bit JIT compileMethod callback.
         /// </summary>
-        /// <param name="thisPtr">Pointer to current class?</param>
+        /// <param name="thisPtr">Pointer to the ICorJitCompiler.</param>
         /// <param name="corJitInfo">The pointer to the ICorJitInfo class instance.</param>
         /// <param name="methodInfo">The MethodInfo of the currently compiling method.</param>
         /// <param name="flags">The flags.</param>
@@ -854,7 +854,7 @@ namespace TinyJitHook.SJITHook
         /// <summary>
         /// The 64 bit JIT compileMethod callback.
         /// </summary>
-        /// <param name="thisPtr">Pointer to current class?</param>
+        /// <param name="thisPtr">Pointer to the ICorJitCompiler.</param>
         /// <param name="corJitInfo">The pointer to the ICorJitInfo class instance.</param>
         /// <param name="methodInfo">The MethodInfo of the currently compiling method.</param>
         /// <param name="flags">The flags.</param>
@@ -881,6 +881,14 @@ namespace TinyJitHook.SJITHook
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         public delegate uint GetMethodDefFromMethodDel(IntPtr thisPtr, IntPtr ftn);
+
+        /// <summary>
+        /// Clear JIT Cache from the ICorJitCompiler
+        /// </summary>
+        /// <param name="thisPtr">The instance of the ICorJitCompiler.</param>
+        // https://github.com/dotnet/coreclr/blob/release/2.1/src/inc/corjit.h#L277
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        public delegate void ClearCacheDel(IntPtr thisPtr);
 
         #endregion
     }

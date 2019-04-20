@@ -59,11 +59,6 @@ namespace TinyJitHook
                 //    nameOfMethod += "test";
                 //}
                 var insts = ilBytes.GetInstructions();
-                if (insts.Count != 2)
-                    return;
-                if (insts[1].OpCode != OpCodes.Pop)
-                    return;
-
                 int index = -1;
 
                 if (insts[0].OpCode == OpCodes.Ldc_I4)

@@ -34,6 +34,14 @@ namespace TinyJitHook.SJITHook
     {
         private readonly T _addrProvider;
 
+        /// <inheritdoc />
+        public IntPtr VTableAddress
+        {
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get => pVTable;
+        }
+
         /// <summary>
         /// The original compile method.
         /// </summary>
@@ -82,12 +90,7 @@ namespace TinyJitHook.SJITHook
         public bool Hook()
         {
             // We don't want any infinite loops :-)
-            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
-            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod32);
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] {typeof (T).TypeHandle});
+            PrepareInternalMethods();
 
             Marshal.WriteIntPtr(pCompileMethod, Marshal.GetFunctionPointerForDelegate(HookedCompileMethod));
 
@@ -110,6 +113,18 @@ namespace TinyJitHook.SJITHook
 
             return Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
                 (Data.Protection) old, out old);
+        }
+
+        /// <inheritdoc />
+        public void PrepareInternalMethods()
+        {
+            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
+            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod32);
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_VTableAddress").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] { typeof(T).TypeHandle });
         }
     }
 }

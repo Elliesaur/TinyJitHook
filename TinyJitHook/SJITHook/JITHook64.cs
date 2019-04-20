@@ -25,13 +25,21 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace TinyJitHook.SJITHook
-{    
+{
     /// <summary>
     /// A 64 bit JIT hook that works on a <see cref="VTableAddrProvider"/> to redirect the pointer to compileMethod.
     /// </summary>
     /// <typeparam name="T">A vtable address provider.</typeparam>
     public unsafe class JITHook64<T> : IJitHook where T : VTableAddrProvider
     {
+        /// <inheritdoc />
+        public IntPtr VTableAddress
+        {
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get => pVTable;
+        }
+
         private readonly T _addrProvider;
         /// <summary>
         /// The original compile method.
@@ -85,12 +93,7 @@ namespace TinyJitHook.SJITHook
         {
            
             // We don't want any infinite loops :-)
-            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
-            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod64);
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] {typeof (T).TypeHandle});
+            PrepareInternalMethods();
 
             if (
                 !Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
@@ -122,6 +125,18 @@ namespace TinyJitHook.SJITHook
 
             return Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
                 (Data.Protection) old, out old);
+        }
+
+        /// <inheritdoc />
+        public void PrepareInternalMethods()
+        {
+            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
+            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod64);
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_VTableAddress").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] { typeof(T).TypeHandle });
         }
     }
 }
