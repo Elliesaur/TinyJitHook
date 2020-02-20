@@ -21,37 +21,22 @@ namespace TinyJitHook.Core.Extensions
             {
                 if (t.ContainsGenericParameters || t.IsGenericType)
                     continue;
-                
+
                 foreach (MethodInfo mi in t.GetMethods())
                 {
-                    
                     if (mi.IsAbstract || mi.IsGenericMethod || mi.IsGenericMethodDefinition)
                         continue;
                     if (mi.DeclaringType != null &&
                         (mi.DeclaringType.IsGenericType || mi.DeclaringType.IsGenericTypeDefinition))
                         continue;
-                    try
-                    {
-                        RuntimeHelpers.PrepareMethod(mi.MethodHandle);
-                    }
-                    catch (Exception)
-                    {
-
-                    }
+                    RuntimeHelpers.PrepareMethod(mi.MethodHandle);
                 }
 
                 foreach (ConstructorInfo ci in t.GetConstructors())
                 {
                     if (ci.IsAbstract)
                         continue;
-                    try
-                    {
-                        RuntimeHelpers.PrepareMethod(ci.MethodHandle);
-                    }
-                    catch (Exception)
-                    {
-
-                    }
+                    RuntimeHelpers.PrepareMethod(ci.MethodHandle);
                 }
             }
         }

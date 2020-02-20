@@ -39,7 +39,7 @@ namespace TinyJitHook.Core.Extensions
             if (obj == null)
                 throw new ArgumentNullException("obj");
             var rtType = obj.GetType();
-           // var fields = rtType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            // var fields = rtType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var field = rtType.GetField(fieldName, BindingFlags.Public |
                                                           BindingFlags.NonPublic |
                                                           BindingFlags.Instance);
@@ -65,7 +65,7 @@ namespace TinyJitHook.Core.Extensions
             if (obj == null)
                 throw new ArgumentNullException("obj");
 
-           // var fields = theType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            // var fields = theType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var field = theType.GetField(fieldName, BindingFlags.Public |
                                                           BindingFlags.NonPublic |
                                                           BindingFlags.Instance);

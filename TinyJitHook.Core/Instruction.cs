@@ -106,71 +106,71 @@ namespace TinyJitHook.Core
             switch (OpCode.OperandType)
             {
                 case OperandType.InlineBrTarget:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineField:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineI:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineI8:
-                    w.Write((long) Data);
+                    w.Write((long)Data);
                     break;
 
                 case OperandType.InlineMethod:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineNone:
                     break;
 
                 case OperandType.InlineR:
-                    w.Write((double) Data);
+                    w.Write((double)Data);
                     break;
 
                 case OperandType.InlineSig:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineString:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineSwitch:
-                    w.Write(((byte[]) Data).Length / 4 - 1);
-                    w.Write((byte[]) Data);
+                    w.Write(((byte[])Data).Length / 4 - 1);
+                    w.Write((byte[])Data);
                     break;
 
                 case OperandType.InlineTok:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineType:
-                    w.Write((int) Data);
+                    w.Write((int)Data);
                     break;
 
                 case OperandType.InlineVar:
-                    w.Write((byte[]) Data);
+                    w.Write((byte[])Data);
                     break;
 
                 case OperandType.ShortInlineBrTarget:
-                    w.Write((byte) Data);
+                    w.Write((byte)Data);
                     break;
 
                 case OperandType.ShortInlineI:
-                    w.Write((sbyte) Data);
+                    w.Write((sbyte)Data);
                     break;
 
                 case OperandType.ShortInlineR:
-                    w.Write((float) Data);
+                    w.Write((float)Data);
                     break;
 
                 case OperandType.ShortInlineVar:
-                    w.Write((byte) Data);
+                    w.Write((byte)Data);
                     break;
 
                 default:

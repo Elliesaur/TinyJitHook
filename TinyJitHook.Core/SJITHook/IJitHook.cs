@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 
 namespace TinyJitHook.Core.SJITHook
 {
@@ -7,6 +8,11 @@ namespace TinyJitHook.Core.SJITHook
     /// </summary>
     public interface IJitHook
     {
+        /// <summary>
+        /// The VTable Address that the address provider retrieved.
+        /// </summary>
+        IntPtr VTableAddress { get; }
+
         /// <summary>
         /// The original compile method (x86) if the JIT hook is for 32 bit (otherwise null).
         /// </summary>
@@ -26,5 +32,10 @@ namespace TinyJitHook.Core.SJITHook
         /// </summary>
         /// <returns>Whether it was successfully removed.</returns>
         bool UnHook();
+
+        /// <summary>
+        /// Prepare internal methods so that we do not run into loops.
+        /// </summary>
+        void PrepareInternalMethods();
     }
 }

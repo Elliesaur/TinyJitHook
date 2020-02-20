@@ -56,6 +56,17 @@ namespace TinyJitHook.Core.SJITHook
         #region Standard
 
         #region Enums
+
+        public enum CorInfoEhClauseFlags
+        {
+            CORINFO_EH_CLAUSE_NONE = 0,
+            CORINFO_EH_CLAUSE_FILTER = 0x0001,    // If this bit is on, then this EH entry is for a filter
+            CORINFO_EH_CLAUSE_FINALLY = 0x0002,   // This clause is a finally clause
+            CORINFO_EH_CLAUSE_FAULT = 0x0004,     // This clause is a fault clause
+            CORINFO_EH_CLAUSE_DUPLICATE = 0x0008, // Duplicated clause. This clause was duplicated to a funclet which was pulled out of line
+            CORINFO_EH_CLAUSE_SAMETRY = 0x0010,   // This clause covers same try block as the previous one. (Used by CoreRT ABI.)
+        };
+
         // Linked with CorInfoMethodInfo->options
         // Changes size depending on .net version, ushort for .net 4.0, uint for .net 3.5
         /// <summary>
@@ -91,9 +102,9 @@ namespace TinyJitHook.Core.SJITHook
             CORINFO_GENERICS_CTXT_FROM_METHODTABLE = 0x00000080,
 
 
-            CORINFO_GENERICS_CTXT_MASK = (CORINFO_GENERICS_CTXT_FROM_THIS |
+            CORINFO_GENERICS_CTXT_MASK = CORINFO_GENERICS_CTXT_FROM_THIS |
                                                        CORINFO_GENERICS_CTXT_FROM_METHODDESC |
-                                                       CORINFO_GENERICS_CTXT_FROM_METHODTABLE),
+                                                       CORINFO_GENERICS_CTXT_FROM_METHODTABLE,
             /// <summary>
             /// Keep the generics context alive throughout the method even if there is no explicit use, and report its location to the CLR
             /// </summary>
@@ -122,7 +133,7 @@ namespace TinyJitHook.Core.SJITHook
             /// <summary>
             /// Generate "debuggable" code (no code-mangling optimizations).
             /// </summary>
-            CORJIT_FLG_DEBUG_CODE = 0x00000004, 
+            CORJIT_FLG_DEBUG_CODE = 0x00000004,
 
             /// <summary>
             /// We are in Edit-n-Continue mode.
@@ -132,7 +143,7 @@ namespace TinyJitHook.Core.SJITHook
             /// <summary>
             /// Generate line and local-var info.
             /// </summary>
-            CORJIT_FLG_DEBUG_INFO = 0x00000010, 
+            CORJIT_FLG_DEBUG_INFO = 0x00000010,
 
             /// <summary>
             /// Loose exception order.
@@ -147,7 +158,7 @@ namespace TinyJitHook.Core.SJITHook
             /// <summary>
             /// Generated code may use fcomi(p) instruction.
             /// </summary>
-            CORJIT_FLG_USE_FCOMI = 0x00001000, 
+            CORJIT_FLG_USE_FCOMI = 0x00001000,
 
             /// <summary>
             /// Generated code may use cmov instruction.
@@ -157,12 +168,12 @@ namespace TinyJitHook.Core.SJITHook
             /// <summary>
             /// Generated code may use SSE-2 instructions.
             /// </summary>
-            CORJIT_FLG_USE_SSE2 = 0x00004000, 
+            CORJIT_FLG_USE_SSE2 = 0x00004000,
 
             /// <summary>
             /// Wrap method calls with probes.
             /// </summary>
-            CORJIT_FLG_PROF_CALLRET = 0x00010000, 
+            CORJIT_FLG_PROF_CALLRET = 0x00010000,
 
             /// <summary>
             /// Instrument prologues/epilogues.
@@ -212,12 +223,12 @@ namespace TinyJitHook.Core.SJITHook
             /// <summary>
             /// Collect basic block profile information.
             /// </summary>
-            CORJIT_FLG_BBINSTR = 0x04000000, 
+            CORJIT_FLG_BBINSTR = 0x04000000,
 
             /// <summary>
             /// Optimize method based on profile information.
             /// </summary>
-            CORJIT_FLG_BBOPT = 0x08000000, 
+            CORJIT_FLG_BBOPT = 0x08000000,
 
             /// <summary>
             /// All methods have an EBP frame.
@@ -598,13 +609,28 @@ namespace TinyJitHook.Core.SJITHook
         }
         #endregion
 
+        #region Exception Handler Clause
+
+        [StructLayout(LayoutKind.Sequential, Size = 24)]
+        public unsafe struct CorInfoEhClause
+        {
+            public uint Flags;
+            public uint TryOffset;
+            public uint TryLength;
+            public uint HandlerOffset;
+            public uint HandlerLength;
+            public uint ClassTokenOrFilterOffset;   // use for type-based exception handlers
+        };
+
+        #endregion
+
         #endregion
 
         #endregion
 
         #region Safe CorMethodInfos
 
-        
+
         public class SafeCorMethodInfo64
         {
 #if NET4
@@ -691,17 +717,17 @@ namespace TinyJitHook.Core.SJITHook
 #endif
             public unsafe SafeCorMethodInfo64(CorMethodInfo64* other)
             {
-                this.args = other->args;
-                this.EHCount = other->EHCount;
-                this.ftn = other->ftn;
-                this.ilCode = new byte[other->ilCodeSize];
+                args = other->args;
+                EHCount = other->EHCount;
+                ftn = other->ftn;
+                ilCode = new byte[other->ilCodeSize];
                 Marshal.Copy((IntPtr)other->ilCode, ilCode, 0, ilCode.Length);
-                this.ilCodeSize = other->ilCodeSize;
-                this.locals = other->locals;
-                this.maxStack = other->maxStack;
-                this.options = other->options;
-                this.scope = other->scope;
-                
+                ilCodeSize = other->ilCodeSize;
+                locals = other->locals;
+                maxStack = other->maxStack;
+                options = other->options;
+                scope = other->scope;
+
             }
 
         }
@@ -793,16 +819,16 @@ namespace TinyJitHook.Core.SJITHook
 #endif
             public unsafe SafeCorMethodInfo(CorMethodInfo* other)
             {
-                this.args = other->args;
-                this.EHCount = other->EHCount;
-                this.ftn = other->ftn;
-                this.ilCode = new byte[other->ilCodeSize];
+                args = other->args;
+                EHCount = other->EHCount;
+                ftn = other->ftn;
+                ilCode = new byte[other->ilCodeSize];
                 Marshal.Copy((IntPtr)other->ilCode, ilCode, 0, ilCode.Length);
-                this.ilCodeSize = other->ilCodeSize;
-                this.locals = other->locals;
-                this.maxStack = other->maxStack;
-                this.options = other->options;
-                this.scope = other->scope;
+                ilCodeSize = other->ilCodeSize;
+                locals = other->locals;
+                maxStack = other->maxStack;
+                options = other->options;
+                scope = other->scope;
             }
         }
 
@@ -813,7 +839,7 @@ namespace TinyJitHook.Core.SJITHook
         /// <summary>
         /// The 32 bit JIT compileMethod callback.
         /// </summary>
-        /// <param name="thisPtr">Pointer to current class?</param>
+        /// <param name="thisPtr">Pointer to the ICorJitCompiler.</param>
         /// <param name="corJitInfo">The pointer to the ICorJitInfo class instance.</param>
         /// <param name="methodInfo">The MethodInfo of the currently compiling method.</param>
         /// <param name="flags">The flags.</param>
@@ -828,7 +854,7 @@ namespace TinyJitHook.Core.SJITHook
         /// <summary>
         /// The 64 bit JIT compileMethod callback.
         /// </summary>
-        /// <param name="thisPtr">Pointer to current class?</param>
+        /// <param name="thisPtr">Pointer to the ICorJitCompiler.</param>
         /// <param name="corJitInfo">The pointer to the ICorJitInfo class instance.</param>
         /// <param name="methodInfo">The MethodInfo of the currently compiling method.</param>
         /// <param name="flags">The flags.</param>
@@ -839,6 +865,30 @@ namespace TinyJitHook.Core.SJITHook
         public unsafe delegate int CompileMethodDel64(
             IntPtr thisPtr, [In] IntPtr corJitInfo, [In] CorMethodInfo64* methodInfo, CorJitFlag flags,
             [Out] IntPtr nativeEntry, [Out] IntPtr nativeSizeOfCode);
+
+        #endregion
+
+        #region Other Delegates
+
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall, SetLastError = true)]
+        public unsafe delegate void GetEHInfoDel(IntPtr thisPtr, [In] IntPtr ftn, [In] uint EHnumber,
+                                                [Out] CorInfoEhClause* clause);
+        //virtual void getEHinfo(
+        //    CORINFO_METHOD_HANDLE ftn, /* IN  */
+        //    unsigned EHnumber,         /* IN */
+        //    CORINFO_EH_CLAUSE* clause  /* OUT */
+        //)
+
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        public delegate uint GetMethodDefFromMethodDel(IntPtr thisPtr, IntPtr ftn);
+
+        /// <summary>
+        /// Clear JIT Cache from the ICorJitCompiler
+        /// </summary>
+        /// <param name="thisPtr">The instance of the ICorJitCompiler.</param>
+        // https://github.com/dotnet/coreclr/blob/release/2.1/src/inc/corjit.h#L277
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        public delegate void ClearCacheDel(IntPtr thisPtr);
 
         #endregion
     }

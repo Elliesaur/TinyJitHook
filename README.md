@@ -1,6 +1,7 @@
 # TinyJitHook
 JIT Hook for:
 * .NET 2.0-4.6+ with x86 and x64 support.
+* .NET 2.0-3.5 does not support exception handlers.
 * .NET Core x.x-2.1 (tested) with x86 and x64 support for Windows devices only (WinAPI used).
 
 

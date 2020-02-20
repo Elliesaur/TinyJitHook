@@ -44,7 +44,6 @@ namespace TinyJitHook.Core.HookHelpers
 
             // .NET 4.0+
             Hook = new JITHook64<ClrjitAddrProvider>(hookedCompileMethod64);
-
             Original = Hook.OriginalCompileMethod64;
         }
 

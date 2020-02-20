@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using TinyJitHook.Core.Extensions;
 
 namespace TinyJitHook.Core
 {
@@ -17,29 +19,34 @@ namespace TinyJitHook.Core
         /// First instruction of try block
         /// </summary>
         public Instruction TryStart;
+        public uint TryStartRaw;
 
         /// <summary>
         /// One instruction past the end of try block or <c>null</c> if it ends at the end
         /// of the method.
         /// </summary>
         public Instruction TryEnd;
+        public uint TryEndRaw;
 
         /// <summary>
         /// Start of filter handler or <c>null</c> if none. The end of filter handler is
         /// always <see cref="HandlerStart"/>.
         /// </summary>
         public Instruction FilterStart;
+        public uint FilterStartRaw;
 
         /// <summary>
         /// First instruction of try handler block
         /// </summary>
         public Instruction HandlerStart;
+        public uint HandlerStartRaw;
 
         /// <summary>
         /// One instruction past the end of try handler block or <c>null</c> if it ends at the end
         /// of the method.
         /// </summary>
         public Instruction HandlerEnd;
+        public uint HandlerEndRaw;
 
         /// <summary>
         /// Type of exception handler clause
@@ -77,7 +84,7 @@ namespace TinyJitHook.Core
                 index2 = index1;
             }
 
-            return body[index1].Offset == 0 ? (uint) recalcBody[index2].Offset : (uint) body[index1].Offset;
+            return body[index1].Offset == 0 ? (uint)recalcBody[index2].Offset : (uint)body[index1].Offset;
         }
 
         public void ReadBig(BinaryReader r, List<Instruction> body)
@@ -85,18 +92,29 @@ namespace TinyJitHook.Core
             HandlerType = (ExceptionHandlerType)r.ReadUInt32();
             uint offset = r.ReadUInt32();
             TryStart = GetInstruction(offset, body);
-            TryEnd = GetInstruction(offset + r.ReadUInt32(), body);
+            TryStartRaw = offset;
+
+            var off2 = offset + r.ReadUInt32();
+            TryEnd = GetInstruction(off2, body);
+            TryEndRaw = off2;
 
             offset = r.ReadUInt32();
             HandlerStart = GetInstruction(offset, body);
-            HandlerEnd = GetInstruction(offset + r.ReadUInt32(), body);
+            HandlerStartRaw = offset;
+
+            var off3 = offset + r.ReadUInt32();
+            HandlerEnd = GetInstruction(off3, body);
+            HandlerEndRaw = off3;
+
             if (HandlerType == ExceptionHandlerType.Catch)
             {
                 CatchTypeToken = r.ReadUInt32();
             }
             else if (HandlerType == ExceptionHandlerType.Filter)
             {
-                FilterStart = GetInstruction(r.ReadUInt32(), body);
+                var off4 = r.ReadUInt32();
+                FilterStart = GetInstruction(off4, body);
+                FilterStartRaw = off4;
             }
             else
             {
@@ -106,21 +124,32 @@ namespace TinyJitHook.Core
 
         public void ReadSmall(BinaryReader r, List<Instruction> body)
         {
-            HandlerType = (ExceptionHandlerType) r.ReadUInt16();
+            HandlerType = (ExceptionHandlerType)r.ReadUInt16();
             uint offset = r.ReadUInt16();
             TryStart = GetInstruction(offset, body);
-            TryEnd = GetInstruction(offset + r.ReadByte(), body);
+            TryStartRaw = offset;
+
+            var off2 = offset + r.ReadByte();
+            TryEnd = GetInstruction(off2, body);
+            TryEndRaw = off2;
 
             offset = r.ReadUInt16();
             HandlerStart = GetInstruction(offset, body);
-            HandlerEnd = GetInstruction(offset + r.ReadByte(), body);
+            HandlerStartRaw = offset;
+
+            var off3 = offset + r.ReadByte();
+            HandlerEnd = GetInstruction(off3, body);
+            HandlerEndRaw = off3;
+
             if (HandlerType == ExceptionHandlerType.Catch)
             {
                 CatchTypeToken = r.ReadUInt32();
             }
             else if (HandlerType == ExceptionHandlerType.Filter)
             {
-                FilterStart = GetInstruction(r.ReadUInt32(), body);
+                var off4 = r.ReadUInt32();
+                FilterStart = GetInstruction(off4, body);
+                FilterStartRaw = off4;
             }
             else
             {

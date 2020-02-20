@@ -23,7 +23,7 @@ namespace TinyJitHook.Core.Extensions
         {
             foreach (var fieldInfo in typeof(OpCodes).GetFields())
             {
-                var opCode = (OpCode) fieldInfo.GetValue(null);
+                var opCode = (OpCode)fieldInfo.GetValue(null);
 
                 _opCodes.Add(opCode.Value, opCode);
             }

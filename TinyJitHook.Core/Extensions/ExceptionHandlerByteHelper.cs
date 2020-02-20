@@ -2,18 +2,40 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using TinyJitHook.Core;
+using TinyJitHook.Core.SJITHook;
 
 namespace TinyJitHook.Core.Extensions
 {
     public static class ExceptionHandlerByteHelper
     {
+        public static List<Data.CorInfoEhClause> GetExceptionClauses(this byte[] data,
+                                                                     List<Instruction> relatedMethodBody)
+        {
+            List<ExceptionHandler> ehList = data.GetExceptionHandlers(relatedMethodBody);
+            List<Data.CorInfoEhClause> exceptionHandlers = new List<Data.CorInfoEhClause>();
+            foreach (var eh in ehList)
+            {
+                exceptionHandlers.Add(new Data.CorInfoEhClause
+                {
+                    Flags = (uint)eh.HandlerType,
+                    TryOffset = eh.TryStartRaw,
+                    TryLength = eh.TryEndRaw - eh.TryStartRaw,
+                    HandlerOffset = eh.HandlerStartRaw,
+                    HandlerLength = eh.HandlerEndRaw - eh.HandlerStartRaw,
+                    ClassTokenOrFilterOffset = eh.CatchTypeToken
+                });
+            }
+
+            return exceptionHandlers;
+        }
         public static List<ExceptionHandler> GetExceptionHandlers(
             this byte[] data, List<Instruction> relatedMethodBody)
         {
             var ret = new List<ExceptionHandler>();
 
             var ehReader = new BinaryReader(new MemoryStream(data));
-            
+
             byte b = ehReader.ReadByte();
             if ((b & 0x3F) != 1)
                 return new List<ExceptionHandler>(); // Not exception handler clauses
@@ -52,7 +74,7 @@ namespace TinyJitHook.Core.Extensions
             using (var ms = new MemoryStream(data))
             using (var writer = new BinaryWriter(ms))
             {
-                writer.Write((((uint) numExceptionHandlers * 24 + 4) << 8) | 0x41);
+                writer.Write((uint)numExceptionHandlers * 24 + 4 << 8 | 0x41);
                 for (var i = 0; i < numExceptionHandlers; i++)
                 {
                     var eh = exceptionHandlers[i];
@@ -77,7 +99,7 @@ namespace TinyJitHook.Core.Extensions
             using (var ms = new MemoryStream(data))
             using (var writer = new BinaryWriter(ms))
             {
-                writer.Write((((uint) numExceptionHandlers * 12 + 4) << 8) | 1);
+                writer.Write((uint)numExceptionHandlers * 12 + 4 << 8 | 1);
                 for (var i = 0; i < numExceptionHandlers; i++)
                 {
                     var eh = exceptionHandlers[i];
@@ -91,30 +113,36 @@ namespace TinyJitHook.Core.Extensions
             return data;
         }
 
-        private static IEnumerable<ExceptionHandler> ReadBigExceptionHandlers(
+        private static List<ExceptionHandler> ReadBigExceptionHandlers(
             BinaryReader ehReader, List<Instruction> body)
         {
+            List<ExceptionHandler> ret = new List<ExceptionHandler>();
             ehReader.BaseStream.Position--;
-            int num = (ushort) ((ehReader.ReadUInt32() >> 8) / 24);
+            int num = (ushort)((ehReader.ReadUInt32() >> 8) / 24);
             for (var i = 0; i < num; i++)
             {
                 var eh = new ExceptionHandler();
                 eh.ReadBig(ehReader, body);
-                yield return eh;
+                ret.Add(eh);
             }
+
+            return ret;
         }
 
-        private static IEnumerable<ExceptionHandler> ReadSmallExceptionHandlers(
+        private static List<ExceptionHandler> ReadSmallExceptionHandlers(
             BinaryReader ehReader, List<Instruction> body)
         {
-            int num = (ushort) ((uint) ehReader.ReadByte() / 12);
+            List<ExceptionHandler> ret = new List<ExceptionHandler>();
+            int num = (ushort)((uint)ehReader.ReadByte() / 12);
             ehReader.BaseStream.Position += 2;
             for (var i = 0; i < num; i++)
             {
                 var eh = new ExceptionHandler();
                 eh.ReadSmall(ehReader, body);
-                yield return eh;
+                ret.Add(eh);
             }
+
+            return ret;
         }
 
         private static bool NeedBigExceptionClauses(List<ExceptionHandler> exceptionHandlers, List<Instruction> body,

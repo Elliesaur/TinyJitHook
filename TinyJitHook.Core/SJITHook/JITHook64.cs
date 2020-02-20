@@ -40,11 +40,19 @@ namespace TinyJitHook.Core.SJITHook
             0xFF, 0xE0
         };
 
+        /// <inheritdoc />
+        public IntPtr VTableAddress
+        {
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            get => pVTable;
+        }
+
         private readonly T _addrProvider;
         /// <summary>
         /// The original compile method.
         /// </summary>
-        
+
         public Data.CompileMethodDel64 OriginalCompileMethod64 { [MethodImpl(MethodImplOptions.NoInlining)] get; private set; }
 
         /// <summary>
@@ -93,14 +101,7 @@ namespace TinyJitHook.Core.SJITHook
         /// <returns>Whether it was successfully hooked.</returns>
         public bool Hook()
         {
-           
-            // We don't want any infinite loops :-)
-            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
-            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod64);
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
-            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] {typeof (T).TypeHandle});
+            PrepareInternalMethods();
 
             if (
                 !Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
@@ -112,8 +113,20 @@ namespace TinyJitHook.Core.SJITHook
 
             Marshal.WriteIntPtr(pCompileMethod, fPtr);
 
-;           return Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
-                (Data.Protection)old, out old);
+            ; return Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
+                  (Data.Protection)old, out old);
+        }
+
+        /// <inheritdoc />
+        public void PrepareInternalMethods()
+        {
+            // We don't want any infinite loops :-)
+            RuntimeHelpers.PrepareDelegate(HookedCompileMethod);
+            RuntimeHelpers.PrepareDelegate(OriginalCompileMethod64);
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod64").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_OriginalCompileMethod32").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("get_HookedCompileMethod").MethodHandle, new[] { typeof(T).TypeHandle });
+            RuntimeHelpers.PrepareMethod(GetType().GetMethod("UnHook").MethodHandle, new[] { typeof(T).TypeHandle });
         }
 
         /// <summary>
@@ -134,7 +147,7 @@ namespace TinyJitHook.Core.SJITHook
             Marshal.WriteIntPtr(pCompileMethod, Marshal.GetFunctionPointerForDelegate(OriginalCompileMethod64));
 
             return Data.VirtualProtect(pCompileMethod, (uint)IntPtr.Size,
-                (Data.Protection) old, out old);
+                (Data.Protection)old, out old);
         }
 
         private void PreLoad(IntPtr fPtr)
