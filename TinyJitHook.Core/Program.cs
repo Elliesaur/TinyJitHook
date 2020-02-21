@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
 using TinyJitHook.Core.Extensions;
 using TinyJitHook.Core.SJITHook;
 
@@ -16,7 +12,7 @@ namespace TinyJitHook.Core
             Assembly asm = Assembly.LoadFrom(@"TinyJitHook.Core.TestApp_x64.dll");
             MainJitHook hook = new MainJitHook(asm, IntPtr.Size == 8);
 
-            //hook.OnCompileMethod += ChangeExample;
+            hook.OnCompileMethod += ChangeExample;
 
             hook.Hook();
 
@@ -34,7 +30,7 @@ namespace TinyJitHook.Core
             {
                 var methodBase = relatedAssembly.ManifestModule.ResolveMethod((int)methodToken);
                 Data.CorMethodInfo* rawMethodInfo = (Data.CorMethodInfo*)args.MethodInfo.ToPointer();
-                
+
                 var insts = ilBytes.GetInstructions();
 
                 Logger.LogInfo(typeof(Program), $"---------------------------------------");

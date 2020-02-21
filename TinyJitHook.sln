@@ -1,13 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28010.2050
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29503.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TinyJitHook", "TinyJitHook\TinyJitHook.csproj", "{30E40BD9-A0EE-451C-B24D-90B0B2485384}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TinyJitHook.Core", "TinyJitHook.Core\TinyJitHook.Core.csproj", "{D8731662-0C29-4A67-B7ED-FE0E7E4305F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TinyJitHook.Core.TestApp", "TinyJitHook.Core.TestApp\TinyJitHook.Core.TestApp.csproj", "{707DCBB3-BFB0-4A74-B187-5C6F7C64B48D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TinyJitHook.Core.TestApp", "TinyJitHook.Core.TestApp\TinyJitHook.Core.TestApp.csproj", "{707DCBB3-BFB0-4A74-B187-5C6F7C64B48D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

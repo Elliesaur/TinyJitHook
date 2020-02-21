@@ -13,7 +13,7 @@ namespace TinyJitHook.Core
 {
     public unsafe class MainJitHook
     {
-        private const int GET_METHOD_DEF_FROM_METHOD_SLOT_INDEX = 105;
+        private const int GET_METHOD_DEF_FROM_METHOD_SLOT_INDEX = 112; // 112 seems promising
         private static MainJitHook _instance;
         private readonly IHookHelper _hookHelper;
 
@@ -308,7 +308,7 @@ namespace TinyJitHook.Core
 #if NET4
         private class EHInfoHook
         {
-            private const int SLOT_COUNT = 166;
+            private const int SLOT_COUNT = 173; // Difference of 7 for slot counts in core.
             private const int SLOT_INDEX = 8;
 
             public readonly IntPtr CorJitInfoPtr;

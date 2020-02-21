@@ -879,7 +879,7 @@ namespace TinyJitHook.Core.SJITHook
         //    CORINFO_EH_CLAUSE* clause  /* OUT */
         //)
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall, SetLastError = true)]
         public delegate uint GetMethodDefFromMethodDel(IntPtr thisPtr, IntPtr ftn);
 
         /// <summary>
