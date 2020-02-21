@@ -4,6 +4,18 @@ JIT Hook for:
 * .NET 2.0-3.5 does not support exception handlers.
 * .NET Core x.x-2.1 (tested) with x86 and x64 support for Windows devices only (WinAPI used).
 
+The main purpose of this JIT Hook is to demonstrate how someone can change method code at runtime.
+Unlike some other libraries out there, this does not edit native code after the original compile method has run. 
+It edits the IL code before it is sent to be compiled.
+
+There are a few helper classes to create IL code, GetBytes/GetInstructions extension methods will allow you to read instructions, 
+edit then write them to bytes. The overhead created by libraries such as dnlib is too great, the idea was to keep it tiny and simple.
+
+An example: a program has a serial key that users must enter, but decompilation can reveal the serial key's value or algorithm that checks the serial.
+Editing the check method through JIT can change the way the check happens without showing the real IL code to decompilers.
+
+Of course, the more famous example would be anti-tamper where method bodies are restored as needed through a JIT hook.
+
 
 # Usage
 For .NET 4.0+ support you must compile the project **with** the conditional compilation symbol "NET4" as well as change the target framework.
